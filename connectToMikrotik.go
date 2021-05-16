@@ -16,7 +16,7 @@ import (
 type request struct {
 	Time,
 	IP string
-	timeInt int64
+	// timeInt int64
 }
 
 type ResponseType struct {
@@ -41,10 +41,10 @@ type Transport struct {
 
 func NewTransport(cfg *Config) *Transport {
 
-	c, err := dial(cfg)
+	c, err := dial(cfg.MTAddr, cfg.MTUser, cfg.MTPass, cfg.UseTLS)
 	if err != nil {
 		log.Errorf("Error connect to %v:%v", cfg.MTAddr, err)
-		c = tryingToReconnectToMokrotik(cfg)
+		c = tryingToReconnectToMokrotik(cfg.MTAddr, cfg.MTUser, cfg.MTPass, cfg.UseTLS, cfg.NumOfTryingConnectToMT)
 	}
 	// defer c.Close()
 
@@ -78,25 +78,25 @@ func NewTransport(cfg *Config) *Transport {
 	}
 }
 
-func dial(cfg *Config) (*routeros.Client, error) {
-	if cfg.UseTLS {
-		return routeros.DialTLS(cfg.MTAddr, cfg.MTUser, cfg.MTPass, nil)
+func dial(MTAddr, MTUser, MTPass string, UseTLS bool) (*routeros.Client, error) {
+	if UseTLS {
+		return routeros.DialTLS(MTAddr, MTUser, MTPass, nil)
 	}
-	return routeros.Dial(cfg.MTAddr, cfg.MTUser, cfg.MTPass)
+	return routeros.Dial(MTAddr, MTUser, MTPass)
 }
 
-func tryingToReconnectToMokrotik(cfg *Config) *routeros.Client {
-	c, err := dial(cfg)
+func tryingToReconnectToMokrotik(MTAddr, MTUser, MTPass string, UseTLS bool, NumOfTryingConnectToMT int) *routeros.Client {
+	c, err := dial(MTAddr, MTUser, MTPass, UseTLS)
 	if err != nil {
-		if cfg.NumOfTryingConnectToMT == 0 {
-			log.Fatalf("Error connect to %v:%v", cfg.MTAddr, err)
-		} else if cfg.NumOfTryingConnectToMT < 0 {
-			cfg.NumOfTryingConnectToMT = -1
+		if NumOfTryingConnectToMT == 0 {
+			log.Fatalf("Error connect to %v:%v", MTAddr, err)
+		} else if NumOfTryingConnectToMT < 0 {
+			NumOfTryingConnectToMT = -1
 		}
-		log.Errorf("Error connect to %v:%v", cfg.MTAddr, err)
+		log.Errorf("Error connect to %v:%v", MTAddr, err)
 		time.Sleep(15 * time.Second)
-		c = tryingToReconnectToMokrotik(cfg)
-		cfg.NumOfTryingConnectToMT--
+		NumOfTryingConnectToMT--
+		c = tryingToReconnectToMokrotik(MTAddr, MTUser, MTPass, UseTLS, NumOfTryingConnectToMT)
 	}
 	return c
 }
@@ -104,24 +104,25 @@ func tryingToReconnectToMokrotik(cfg *Config) *routeros.Client {
 func (data *Transport) GetInfo(request *request) ResponseType {
 	var response ResponseType
 
-	timeInt, err := strconv.ParseInt(request.Time, 10, 64)
-	if err != nil {
-		log.Errorf("Error parsing timeStamp(%v) from request:%v", timeInt, err)
-		//With an incorrect time, removes 30 seconds from the current time to be able to identify the IP address
-		timeInt = time.Now().Add(-30 * time.Second).Unix()
-	}
-	request.timeInt = timeInt
+	// timeInt, err := strconv.ParseInt(request.Time, 10, 64)
+	// if err != nil {
+	// 	log.Errorf("Error parsing timeStamp(%v) from request:%v", timeInt, err)
+	// 	//With an incorrect time, removes 30 seconds from the current time to be able to identify the IP address
+	// 	timeInt = time.Now().Add(-30 * time.Second).Unix()
+	// }
+	// request.timeInt = timeInt
 	data.RLock()
 	ipStruct, ok := data.ipToMac[request.IP]
 	data.RUnlock()
-	// if ok && timeInt < ipStruct.timeoutInt {
-	// 	log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
-	// 	response.Mac = ipStruct.Mac
-	// 	response.IP = ipStruct.IP
-	// 	response.Hostname = ipStruct.HostName
-	// 	response.Comment = ipStruct.Comment
-	// } else
-	if ok {
+	if ok && time.Since(ipStruct.timeout) < (5*time.Minute) {
+		log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
+		response.Mac = ipStruct.Mac
+		response.IP = ipStruct.IP
+		response.Hostname = ipStruct.HostName
+		response.Comment = ipStruct.Comment
+	} else if ok {
+		device := data.getInfoFromMTAboutIP(request.IP, &cfg)
+		data.updateInfoAboutIP(device)
 		log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
 		response.Mac = ipStruct.Mac
 		response.IP = ipStruct.IP
@@ -136,6 +137,9 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 		device := data.getInfoFromMTAboutIP(request.IP, &cfg)
 		data.updateInfoAboutIP(device)
 		log.Tracef("IP:'%v' not find in table lease of router:'%v'", ipStruct.IP, cfg.MTAddr)
+		if device.Mac == "" {
+			response.Mac = request.IP
+		}
 		response.Mac = device.Mac
 		response.IP = request.IP
 	}
@@ -148,6 +152,7 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 
 func (data *Transport) getInfoFromMTAboutIP(ip string, cfg *Config) DeviceType {
 	device := DeviceType{}
+	device.IP = ip
 
 	reply2, err2 := data.clientROS.Run("/ip/dhcp-server/lease/print", "?active-address="+ip)
 	if err2 != nil {
@@ -155,12 +160,22 @@ func (data *Transport) getInfoFromMTAboutIP(ip string, cfg *Config) DeviceType {
 	}
 	for _, re := range reply2.Re {
 		device.Id = re.Map[".id"]
-		device.IP = re.Map["active-address"]
+		// device.IP = re.Map["active-address"]
 		device.Mac = re.Map["mac-address"]
 		device.HostName = re.Map["host-name"]
 		device.Groups = re.Map["address-lists"]
+	}
+	if device.Mac == "" {
+		reply, err := data.clientROS.Run("/ip/arp/print", "?address="+ip)
+		if err != nil {
+			log.Error(err)
+		}
+		for _, re := range reply.Re {
+			device.Mac = re.Map["mac-address"]
+		}
 
 	}
+	log.Tracef("Get info from mikrotik ip(%v), device:%v\n", ip, device)
 	return device
 
 }
@@ -183,6 +198,11 @@ func (data *Transport) updateInfoAboutIP(device DeviceType) {
 	if lineOfData.MonthlyQuota == 0 {
 		lineOfData.MonthlyQuota = quotamonthly
 	}
+
+	if lineOfData.Mac == "" {
+		lineOfData.Mac = lineOfData.IP
+	}
+	lineOfData.timeout = time.Now().In(data.Location)
 
 	data.Lock()
 	data.ipToMac[device.IP] = lineOfData
@@ -245,7 +265,7 @@ func (data *Transport) getDataFromMT() map[string]LineOfData {
 		if lineOfData.MonthlyQuota == 0 {
 			lineOfData.MonthlyQuota = quotamonthly
 		}
-		lineOfData.timeoutInt = time.Now().Add(1 * time.Minute).Unix()
+		lineOfData.timeout = time.Now()
 		ipToMac[lineOfData.IP] = lineOfData
 	}
 	reply2, err2 := data.clientROS.Run("/ip/dhcp-server/lease/print") //, "?status=bound") //, "?disabled=false")
@@ -256,7 +276,7 @@ func (data *Transport) getDataFromMT() map[string]LineOfData {
 		lineOfData.Id = re.Map[".id"]
 		lineOfData.IP = re.Map["active-address"]
 		lineOfData.Mac = re.Map["active-mac-address"]
-		lineOfData.timeout = re.Map["expires-after"]
+		// lineOfData.timeoutStr = re.Map["expires-after"]
 		lineOfData.HostName = re.Map["host-name"]
 		lineOfData.Comment = re.Map["comment"]
 		lineOfData.HourlyQuota, lineOfData.DailyQuota, lineOfData.MonthlyQuota, lineOfData.Name, lineOfData.Position, lineOfData.Company, lineOfData.TypeD = parseComments(lineOfData.Comment)
@@ -273,13 +293,7 @@ func (data *Transport) getDataFromMT() map[string]LineOfData {
 		addressLists := re.Map["address-lists"]
 		lineOfData.addressLists = strings.Split(addressLists, ",")
 
-		//Calculating the time when the lease of the address ends
-		timeStr, err := time.ParseDuration(lineOfData.timeout)
-		if err != nil {
-			timeStr = 10 * time.Second
-		}
-		// Writes to a variable for further quick comparison
-		lineOfData.timeoutInt = time.Now().Add(timeStr).Unix()
+		lineOfData.timeout = time.Now()
 
 		ipToMac[lineOfData.IP] = lineOfData
 
