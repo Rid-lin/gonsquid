@@ -114,27 +114,29 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 	data.RLock()
 	ipStruct, ok := data.ipToMac[request.IP]
 	data.RUnlock()
-	if ok && timeInt < ipStruct.timeoutInt {
+	// if ok && timeInt < ipStruct.timeoutInt {
+	// 	log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
+	// 	response.Mac = ipStruct.Mac
+	// 	response.IP = ipStruct.IP
+	// 	response.Hostname = ipStruct.HostName
+	// 	response.Comment = ipStruct.Comment
+	// } else
+	if ok {
 		log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
 		response.Mac = ipStruct.Mac
 		response.IP = ipStruct.IP
 		response.Hostname = ipStruct.HostName
 		response.Comment = ipStruct.Comment
-	} else if ok {
-		// TODO remove
-		log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
-		response.Mac = ipStruct.Mac
-		response.IP = ipStruct.IP
-		response.Hostname = ipStruct.HostName
-		response.Comment = ipStruct.Comment
-	} else if !ok {
-		// TODO Make information about the mac-address loaded from the router
-		log.Tracef("IP:'%v' not find in table lease of router:'%v'", ipStruct.IP, cfg.MTAddr)
-		response.Mac = request.IP
-		response.IP = request.IP
+		// } else if !ok {
+		// 	// TODO Make information about the mac-address loaded from the router
+		// 	log.Tracef("IP:'%v' not find in table lease of router:'%v'", ipStruct.IP, cfg.MTAddr)
+		// 	response.Mac = request.IP
+		// 	response.IP = request.IP
 	} else {
+		device := data.getInfoFromMTAboutIP(request.IP, &cfg)
+		data.updateInfoAboutIP(device)
 		log.Tracef("IP:'%v' not find in table lease of router:'%v'", ipStruct.IP, cfg.MTAddr)
-		response.Mac = request.IP
+		response.Mac = device.Mac
 		response.IP = request.IP
 	}
 	if response.Mac == "" {
@@ -142,6 +144,49 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 	}
 
 	return response
+}
+
+func (data *Transport) getInfoFromMTAboutIP(ip string, cfg *Config) DeviceType {
+	device := DeviceType{}
+
+	reply2, err2 := data.clientROS.Run("/ip/dhcp-server/lease/print", "?active-address="+ip)
+	if err2 != nil {
+		log.Error(err2)
+	}
+	for _, re := range reply2.Re {
+		device.Id = re.Map[".id"]
+		device.IP = re.Map["active-address"]
+		device.Mac = re.Map["mac-address"]
+		device.HostName = re.Map["host-name"]
+		device.Groups = re.Map["address-lists"]
+
+	}
+	return device
+
+}
+
+func (data *Transport) updateInfoAboutIP(device DeviceType) {
+	data.RLock()
+	quotahourly := data.HourlyQuota
+	quotadaily := data.DailyQuota
+	quotamonthly := data.MonthlyQuota
+	data.RUnlock()
+
+	lineOfData := LineOfData{}
+	lineOfData.DeviceType = device
+	if lineOfData.HourlyQuota == 0 {
+		lineOfData.HourlyQuota = quotahourly
+	}
+	if lineOfData.DailyQuota == 0 {
+		lineOfData.DailyQuota = quotadaily
+	}
+	if lineOfData.MonthlyQuota == 0 {
+		lineOfData.MonthlyQuota = quotamonthly
+	}
+
+	data.Lock()
+	data.ipToMac[device.IP] = lineOfData
+	data.Unlock()
 }
 
 /*
