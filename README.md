@@ -18,7 +18,7 @@ Copy folder assets to /usr/share/gonsquid/
 
 Build programm:
 
-`make -f make_linux`
+`make build`
 
 Move binary file
 
@@ -30,7 +30,7 @@ Edit file /usr/share/gonsquid/assets/gonsquid.service
 
 E.g.
 
-`/usr/local/bin/gonsquid -subnet=10.0.0.0/8 -subnet=192.168.0.0/16 -ignorlist=10.0.0.2 -ignorlist=:3128 -ignorlist=8.8.8.8:53 -ignorlist=ff02:: -loglevel=debug -log=/var/log/gonsquid/access.log -mtaddr=192.168.1.1:8728 -u=mikrotik_user -p=mikrotik_user_password -sqladdr=mysql_user_name:mysql_password@/screensquid`
+`/usr/local/bin/gonsquid -subnet=10.0.0.0/8 -subnet=192.168.0.0/16 -ignorlist=10.0.0.2 -ignorlist=:3128 -ignorlist=8.8.8.8:53 -ignorlist=ff02:: -loglevel=debug -log=/var/log/gonsquid/access.log -mtaddr=192.168.1.1:8728 -u=mikrotik_user -p=mikrotik_user_password`
 
 and move to /lib/systemd/system
 
@@ -60,34 +60,44 @@ Add a task to cron (start every 5 minutes)
 
 ```
 Usage of gonsquid.exe:
-  -addr string
+  -bind_addr string
+        Listen address for response mac-address from mikrotik (default ":3030")
+  -csv string
+        Output to csv (default "false")
+  -default_quota_daily string
+        Default daily traffic consumption quota (default "0")
+  -default_quota_hourly string
+        Default hourly traffic consumption quota (default "0")
+  -default_quota_monthly string
+        Default monthly traffic consumption quota (default "0")
+  -flow_addr string
         Address and port to listen NetFlow packets (default "0.0.0.0:2055")
-  -buffer int
-        Size of RxQueue, i.e. value for SO_RCVBUF in bytes (default 212992)
-  -gmt string
-        GMT offset time (default "+0500")
-  -ignorlist value
+  -ignor_list string
         List of lines that will be excluded from the final log
   -interval string
         Interval to getting info from Mikrotik (default "10m")
-  -log string
-        The file where logs will be written in the format of squid logs
-  -loglevel string
-        Log level (default "info")
-  -m4maddr string
-        Listen address for response mac-address from mikrotik (default ":3030")
-  -mtaddr string
+  -loc string
+        Location for time (default "Asia/Yekaterinburg")
+  -log_level string
+        Log level: panic, fatal, error, warn, info, debug, trace (default "info")
+  -mt_addr string
         The address of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken
-  -p string
-        The password of the user of the Mikrotik router, from which the data on the comparison of the mac-address and IP-address is taken
-  -sqladdr string
-        string to connect DB (e.g. username:password@protocol(address)/dbname?param=value) More details in https://github.com/go-sql-driver/mysql#dsn-data-source-name
-  -subnet value
-        List of subnets traffic between which will not be counted
-  -tls
-        Using TLS to connect to a router
-  -u string
+  -mt_pass string
+        The password of the user of the Mikrotik router, from which the data on the comparison of the mac-address and IP-address is taken      
+  -mt_user string
         User of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken
+  -name_file_to_log string
+        The file where logs will be written in the format of squid logs
+  -num_of_trying_connect_to_mt string
+        The number of attempts to connect to the microtik router (default "10")
+  -receive_buffer_size_bytes string
+        Size of RxQueue, i.e. value for SO_RCVBUF in bytes
+  -size_one_megabyte string
+        The number of bytes in one megabyte (default "1048576")
+  -sub_nets string
+        List of subnets traffic between which will not be counted
+  -use_tls string
+        Using TLS to connect to a router (default "false")
 ```
 
 ## Credits

@@ -221,9 +221,7 @@ func checkIP(subnet string, ipv4addr net.IP) (bool, error) {
 }
 
 func (data *Transport) pipeOutputToStdoutForSquid(outputChannel chan decodedRecord, cfg *Config) {
-	var record decodedRecord
-	for {
-		record = <-outputChannel
+	for record := range outputChannel {
 		log.Tracef("Get from outputChannel:%v", record)
 		message, csvMessage := data.decodeRecordToSquid(&record, cfg)
 		log.Tracef("Decoded record (%v) to message (%v)", record, message)

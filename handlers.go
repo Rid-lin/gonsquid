@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -23,11 +24,11 @@ type PersonType struct {
 }
 
 type LineOfData struct {
-	timeout,
+	// timeoutStr,
 	Comment,
 	disable string
 	addressLists []string
-	timeoutInt   int64
+	// timeoutInt   int64
 	DeviceType
 	QuotaType
 	PersonType
@@ -40,6 +41,7 @@ type DeviceType struct {
 	Mac      string
 	HostName string
 	Groups   string
+	timeout  time.Time
 }
 
 func logreq(f func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
