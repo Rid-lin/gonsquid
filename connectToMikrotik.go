@@ -22,8 +22,8 @@ type request struct {
 type ResponseType struct {
 	IP       string `JSON:"IP"`
 	Mac      string `JSON:"Mac"`
-	Hostname string `JSON:"Hostname"`
-	Comment  string `JSON:"Comment"`
+	HostName string `JSON:"Hostname"`
+	Comments string `JSON:"Comment"`
 }
 
 type Transport struct {
@@ -118,16 +118,16 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 		log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
 		response.Mac = ipStruct.Mac
 		response.IP = ipStruct.IP
-		response.Hostname = ipStruct.HostName
-		response.Comment = ipStruct.Comment
+		response.HostName = ipStruct.HostName
+		response.Comments = ipStruct.Comment
 	} else if ok {
 		device := data.getInfoFromMTAboutIP(request.IP, &cfg)
 		data.updateInfoAboutIP(device)
 		log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
 		response.Mac = ipStruct.Mac
 		response.IP = ipStruct.IP
-		response.Hostname = ipStruct.HostName
-		response.Comment = ipStruct.Comment
+		response.HostName = ipStruct.HostName
+		response.Comments = ipStruct.Comment
 		// } else if !ok {
 		// 	// TODO Make information about the mac-address loaded from the router
 		// 	log.Tracef("IP:'%v' not find in table lease of router:'%v'", ipStruct.IP, cfg.MTAddr)
