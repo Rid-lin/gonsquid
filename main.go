@@ -2,11 +2,18 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"net"
-	"net/http"
 
 	log "github.com/sirupsen/logrus"
 )
+
+func init() {
+	flag.StringVar(&ConfigPath,
+		"config_path",
+		"",
+		"path to config file")
+}
 
 func main() {
 	var (
@@ -15,31 +22,19 @@ func main() {
 
 	cfg := newConfig()
 
-	cache.cache = make(map[string]cacheRecord)
+	// cache.cache = make(map[string]cacheRecord)
 
 	data := NewTransport(cfg)
 	/*Creating a channel to intercept the program end signal*/
-	// exitChan := getExitSignalsChannel()
 
-	data.HourlyQuota = uint64(cfg.DefaultQuotaHourly * cfg.SizeOneMegabyte)
-	data.DailyQuota = uint64(cfg.DefaultQuotaDaily * cfg.SizeOneMegabyte)
-	data.MonthlyQuota = uint64(cfg.DefaultQuotaMonthly * cfg.SizeOneMegabyte)
-
-	go data.loopGetDataFromMT()
-
-	http.HandleFunc("/", logreq(handleIndex))
-	http.HandleFunc("/getmac", logreq(data.handlerGetMac()))
-	http.HandleFunc("/setstatusdevices", logreq(data.handlerSetStatusDevices))
-	http.HandleFunc("/getstatusdevices", logreq(data.handlerGetStatusDevices))
-
-	log.Infof("gonsquid listens to:%v", cfg.BindAddr)
-
-	go func() {
-		err := http.ListenAndServe(cfg.BindAddr, nil)
-		if err != nil {
-			log.Error("http-server returned error:", err)
+	// Endless file parsing loop
+	go func(cfg *Config) {
+		data.runOnce(cfg)
+		for {
+			<-data.timerUpdatedevice.C
+			data.runOnce(cfg)
 		}
-	}()
+	}(cfg)
 
 	go data.Exit()
 
