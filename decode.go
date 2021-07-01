@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -134,11 +133,11 @@ func (t *Transport) decodeRecordToSquid(record *decodedRecord, cfg *Config) (str
 			protocol,          // protocol
 			binRecord.InBytes, // size
 			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), //src ip
-			binRecord.L4DstPort, // dstport
+			binRecord.L4SrcPort, // src port
 			response.Mac,        // dstmac
 			remoteAddr,          // routerIP
 			// net.HardwareAddr(srcmacB).String(), // srcmac
-			binRecord.L4SrcPort, // src port
+			binRecord.L4DstPort, // dstport
 			response.HostName,
 			response.Comments,
 		)
@@ -149,11 +148,11 @@ func (t *Transport) decodeRecordToSquid(record *decodedRecord, cfg *Config) (str
 			protocol,                             // protocol
 			remoteAddr,                           // routerIP
 			intToIPv4Addr(binRecord.Ipv4DstAddrInt).String(), // dst ip
-			binRecord.L4DstPort, // dstport
+			binRecord.L4SrcPort, // src port
 			response.Mac,        // dstmac
 			response.HostName,
 			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), // src ip
-			binRecord.L4SrcPort, // src port
+			binRecord.L4DstPort, // dstport
 			response.Comments,
 		)
 
@@ -254,18 +253,18 @@ func filtredMessage(message string, IgnorList []string) string {
 	return message
 }
 
-type cacheRecord struct {
-	Hostname string
-	// timeout  time.Time
-}
+// type cacheRecord struct {
+// 	Hostname string
+// 	// timeout  time.Time
+// }
 
-type Cache struct {
-	cache map[string]cacheRecord
-	sync.RWMutex
-}
+// type Cache struct {
+// 	cache map[string]cacheRecord
+// 	sync.RWMutex
+// }
 
 var (
-	cache Cache
+	// cache Cache
 	// cache      = map[string]cacheRecord{}
 	// cacheMutex = sync.RWMutex{}
 	// writer           *bufio.Writer

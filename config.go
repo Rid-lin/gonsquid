@@ -1,22 +1,26 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"time"
 
 	"github.com/cristalhq/aconfig"
-	"github.com/cristalhq/aconfig/aconfigtoml"
+	"github.com/cristalhq/aconfig/aconfigyaml"
 
 	log "github.com/sirupsen/logrus"
 )
+
+var ConfigPath string
 
 type Config struct {
 	// ConfigFilename         string   `default:"" usage:`
 	SubNets                []string `default:"" usage:"List of subnets traffic between which will not be counted"`
 	IgnorList              []string `default:"" usage:"List of lines that will be excluded from the final log"`
 	LogLevel               string   `default:"info" usage:"Log level: panic, fatal, error, warn, info, debug, trace"`
+	GomtcAddr              string   `default:"127.0.0.1:3034" usage:"Address and port for connect to gomtc API"`
 	FlowAddr               string   `default:"0.0.0.0:2055" usage:"Address and port to listen NetFlow packets"`
 	NameFileToLog          string   `default:"" usage:"The file where logs will be written in the format of squid logs"`
-	BindAddr               string   `default:":3030" usage:"Listen address for response mac-address from mikrotik"`
 	MTAddr                 string   `default:"" usage:"The address of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken"`
 	MTUser                 string   `default:"" usage:"User of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken"`
 	MTPass                 string   `default:"" usage:"The password of the user of the Mikrotik router, from which the data on the comparison of the mac-address and IP-address is taken"`
@@ -30,14 +34,19 @@ type Config struct {
 	SizeOneMegabyte        uint     `default:"1048576" usage:"The number of bytes in one megabyte"`
 	UseTLS                 bool     `default:"false" usage:"Using TLS to connect to a router"`
 	CSV                    bool     `default:"false" usage:"Output to csv"`
+	UseOnlyAPI             bool     `default:"true" usage:"Use only gomt API"`
 	Location               *time.Location
 }
 
-var (
-	cfg Config
-)
-
 func newConfig() *Config {
+	// fix for https://github.com/cristalhq/aconfig/issues/82
+	args := []string{}
+	for _, a := range os.Args {
+		if !strings.HasPrefix(a, "-test.") {
+			args = append(args, a)
+		}
+	}
+	// fix for https://github.com/cristalhq/aconfig/issues/82
 
 	var cfg Config
 	loader := aconfig.LoaderFor(&cfg, aconfig.Config{
@@ -49,12 +58,23 @@ func newConfig() *Config {
 		SkipFlags:          false,
 		EnvPrefix:          "GONSQUID",
 		FlagPrefix:         "",
-		Files:              []string{"/etc/gonsquid/config.toml", "./config.toml", "./config/config.toml"},
+		Files: []string{
+			ConfigPath,
+			"./config.yaml",
+			"./config/config.yaml",
+			"/etc/gonsquid/config.yaml",
+			"/bin/local/bin/gonsquid/config.yaml",
+			"/bin/local/bin/gonsquid/config/config.yaml",
+			"/opt/gonsquid/config.yaml",
+			"/opt/gonsquid/config/config.yaml",
+		},
 		FileDecoders: map[string]aconfig.FileDecoder{
 			// from `aconfigyaml` submodule
 			// see submodules in repo for more formats
-			".toml": aconfigtoml.New(),
+			".yaml": aconfigyaml.New(),
+			// ".toml": aconfigtoml.New(),
 		},
+		Args: args[1:], // [1:] важно, см. доку к FlagSet.Parse
 	})
 
 	if err := loader.Load(); err != nil {
