@@ -48,6 +48,9 @@ type Config struct {
 	// If default is set and this option is enabled (or required tag is set) there will be an error.
 	AllFieldRequired bool
 
+	// AllowDuplicates set to true will not fail on duplicated names on fields (env, flag, etc...)
+	AllowDuplicates bool
+
 	// AllowUnknownFields set to true will not fail on unknown fields in files.
 	AllowUnknownFields bool
 
@@ -93,6 +96,7 @@ type Config struct {
 
 // FileDecoder is used to read config from files. See aconfig submodules.
 type FileDecoder interface {
+	Format() string
 	DecodeFile(filename string) (map[string]interface{}, error)
 }
 
@@ -152,7 +156,10 @@ func (l *Loader) init() {
 	l.flagSet = flag.NewFlagSet(l.config.FlagPrefix, flag.ContinueOnError)
 	if !l.config.SkipFlags {
 		for _, field := range l.fields {
-			flagName := l.config.FlagPrefix + l.fullTag(field, flagNameTag)
+			flagName := l.fullTag(l.config.FlagPrefix, field, flagNameTag)
+			if flagName == "" {
+				continue
+			}
 			l.flagSet.String(flagName, field.Tag(defaultValueTag), field.Tag(usageTag))
 		}
 	}
@@ -210,22 +217,22 @@ func (l *Loader) parseFlags() error {
 func (l *Loader) loadSources() error {
 	if !l.config.SkipDefaults {
 		if err := l.loadDefaults(); err != nil {
-			return err
+			return fmt.Errorf("loading defaults: %w", err)
 		}
 	}
 	if !l.config.SkipFiles {
-		if err := l.loadFromFile(); err != nil {
-			return err
+		if err := l.loadFiles(); err != nil {
+			return fmt.Errorf("loading files: %w", err)
 		}
 	}
 	if !l.config.SkipEnv {
 		if err := l.loadEnvironment(); err != nil {
-			return err
+			return fmt.Errorf("loading environment: %w", err)
 		}
 	}
 	if !l.config.SkipFlags {
 		if err := l.loadFlags(); err != nil {
-			return err
+			return fmt.Errorf("loading flags: %w", err)
 		}
 	}
 	return nil
@@ -254,16 +261,10 @@ func (l *Loader) loadDefaults() error {
 	return nil
 }
 
-func (l *Loader) loadFromFile() error {
+func (l *Loader) loadFiles() error {
 	if l.config.FileFlag != "" {
-		flag := l.flagSet.Lookup(l.config.FileFlag)
-		if flag != nil {
-			configFile := flag.Value.String()
-			if l.config.MergeFiles {
-				l.config.Files = append(l.config.Files, configFile)
-			} else {
-				l.config.Files = []string{configFile}
-			}
+		if err := l.loadFileFlag(); err != nil {
+			return err
 		}
 	}
 
@@ -275,67 +276,108 @@ func (l *Loader) loadFromFile() error {
 			continue
 		}
 
-		ext := strings.ToLower(filepath.Ext(file))
-		decoder, ok := l.config.FileDecoders[ext]
-		if !ok {
-			return fmt.Errorf("file format '%q' isn't supported", ext)
-		}
-
-		actualFields, err := decoder.DecodeFile(file)
-		if err != nil {
+		if err := l.loadFile(file); err != nil {
 			return err
-		}
-
-		tag := ext[1:]
-
-		for _, field := range l.fields {
-			name := l.fullTag(field, tag)
-			value, ok := actualFields[name]
-			if !ok {
-				actualFields = find(actualFields, name)
-				value, ok = actualFields[name]
-				if !ok {
-					continue
-				}
-			}
-
-			if err := l.setFieldData(field, value); err != nil {
-				return err
-			}
-			field.isSet = true
-			delete(actualFields, name)
-		}
-
-		if !l.config.AllowUnknownFields {
-			for env, value := range actualFields {
-				return fmt.Errorf("unknown field in file %q: %s=%s (see AllowUnknownFields config param)", file, env, value)
-			}
 		}
 
 		if l.config.MergeFiles {
 			continue
 		}
+		break
+	}
+	return nil
+}
+
+func (l *Loader) loadFile(file string) error {
+	ext := strings.ToLower(filepath.Ext(file))
+	decoder, ok := l.config.FileDecoders[ext]
+	if !ok {
+		return fmt.Errorf("file format %q is not supported", ext)
+	}
+
+	actualFields, err := decoder.DecodeFile(file)
+	if err != nil {
+		return err
+	}
+
+	tag := decoder.Format()
+
+	for _, field := range l.fields {
+		name := l.fullTag("", field, tag)
+		if name == "" {
+			continue
+		}
+		value, ok := actualFields[name]
+		if !ok {
+			actualFields = find(actualFields, name)
+			value, ok = actualFields[name]
+			if !ok {
+				continue
+			}
+		}
+
+		if err := l.setFieldData(field, value); err != nil {
+			return err
+		}
+		field.isSet = true
+		delete(actualFields, name)
+	}
+
+	if !l.config.AllowUnknownFields {
+		for env, value := range actualFields {
+			return fmt.Errorf("unknown field in file %q: %s=%v (see AllowUnknownFields config param)", file, env, value)
+		}
+	}
+	return nil
+}
+
+func (l *Loader) loadFileFlag() error {
+	fileFlag := getActualFlag(l.config.FileFlag, l.flagSet)
+	if fileFlag == nil {
 		return nil
+	}
+
+	configFile := fileFlag.Value.String()
+	if configFile == "" {
+		return fmt.Errorf("%s should not be empty", l.config.FileFlag)
+	}
+
+	if l.config.MergeFiles {
+		l.config.Files = append(l.config.Files, configFile)
+	} else {
+		l.config.Files = []string{configFile}
 	}
 	return nil
 }
 
 func (l *Loader) loadEnvironment() error {
 	actualEnvs := getEnv()
+	dupls := make(map[string]struct{})
 
 	for _, field := range l.fields {
-		envName := l.config.EnvPrefix + l.fullTag(field, envNameTag)
+		envName := l.fullTag(l.config.EnvPrefix, field, envNameTag)
+		if envName == "" {
+			continue
+		}
 
-		if err := l.setField(field, envName, actualEnvs); err != nil {
+		if err := l.setField(field, envName, actualEnvs, dupls); err != nil {
 			return err
 		}
 	}
 
-	if !l.config.AllowUnknownEnvs && l.config.EnvPrefix != "" {
-		for env, value := range actualEnvs {
-			if strings.HasPrefix(env, l.config.EnvPrefix) {
-				return fmt.Errorf("unknown environment var %s=%s (see AllowUnknownEnvs config param)", env, value)
-			}
+	return l.postEnvCheck(actualEnvs, dupls)
+}
+
+func (l *Loader) postEnvCheck(values map[string]interface{}, dupls map[string]struct{}) error {
+	for name := range dupls {
+		delete(values, name)
+	}
+	if l.config.AllowUnknownEnvs || l.config.EnvPrefix == "" {
+		return nil
+	}
+	for env, value := range values {
+		if strings.HasPrefix(env, l.config.EnvPrefix) {
+			return fmt.Errorf("unknown environment var %s=%v (see AllowUnknownEnvs config param)", env, value)
 		}
 	}
 	return nil
@@ -343,26 +385,45 @@ func (l *Loader) loadEnvironment() error {
 
 func (l *Loader) loadFlags() error {
 	actualFlags := getFlags(l.flagSet)
+	dupls := make(map[string]struct{})
 
 	for _, field := range l.fields {
-		flagName := l.config.FlagPrefix + l.fullTag(field, flagNameTag)
+		flagName := l.fullTag(l.config.FlagPrefix, field, flagNameTag)
+		if flagName == "" {
+			continue
+		}
 
-		if err := l.setField(field, flagName, actualFlags); err != nil {
+		if err := l.setField(field, flagName, actualFlags, dupls); err != nil {
 			return err
 		}
 	}
+	return l.postFlagCheck(actualFlags, dupls)
+}
 
-	if !l.config.AllowUnknownFlags && l.config.FlagPrefix != "" {
-		for flag, value := range actualFlags {
-			if strings.HasPrefix(flag, l.config.FlagPrefix) {
-				return fmt.Errorf("unknown flag %s=%s (see AllowUnknownFlags config param)", flag, value)
-			}
+func (l *Loader) postFlagCheck(values map[string]interface{}, dupls map[string]struct{}) error {
+	for name := range dupls {
+		delete(values, name)
+	}
+	if l.config.AllowUnknownFlags || l.config.FlagPrefix == "" {
+		return nil
+	}
+	for flag, value := range values {
+		if strings.HasPrefix(flag, l.config.EnvPrefix) {
+			return fmt.Errorf("unknown flag %s=%v (see AllowUnknownFlags config param)", flag, value)
 		}
 	}
 	return nil
 }
 
-func (l *Loader) setField(field *fieldData, name string, values map[string]interface{}) error {
+// TODO(cristaloleg): revisit
+func (l *Loader) setField(field *fieldData, name string, values map[string]interface{}, dupls map[string]struct{}) error {
+	if !l.config.AllowDuplicates {
+		if _, ok := dupls[name]; ok {
+			return fmt.Errorf("field %q is duplicated", name)
+		}
+		dupls[name] = struct{}{}
+	}
+
 	val, ok := values[name]
 	if !ok {
 		return nil
@@ -373,6 +434,8 @@ func (l *Loader) setField(field *fieldData, name string, values map[string]inter
 	}
 
 	field.isSet = true
-	delete(values, name)
+	if !l.config.AllowDuplicates {
+		delete(values, name)
+	}
 	return nil
 }

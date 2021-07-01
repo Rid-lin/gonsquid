@@ -1,16 +1,21 @@
-package aconfigtoml
+package aconfigyaml
 
 import (
 	"os"
 
-	"github.com/BurntSushi/toml"
+	"gopkg.in/yaml.v2"
 )
 
-// Decoder of TOML files for aconfig.
+// Decoder of YAML files for aconfig.
 type Decoder struct{}
 
-// New TOML decoder for aconfig.
+// New YAML decoder for aconfig.
 func New() *Decoder { return &Decoder{} }
+
+// Format of the decoder.
+func (d *Decoder) Format() string {
+	return "yaml"
+}
 
 // DecodeFile implements aconfig.FileDecoder.
 func (d *Decoder) DecodeFile(filename string) (map[string]interface{}, error) {
@@ -21,7 +26,7 @@ func (d *Decoder) DecodeFile(filename string) (map[string]interface{}, error) {
 	defer f.Close()
 
 	var raw map[string]interface{}
-	if _, err := toml.DecodeReader(f, &raw); err != nil {
+	if err := yaml.NewDecoder(f).Decode(&raw); err != nil {
 		return nil, err
 	}
 	return raw, nil
