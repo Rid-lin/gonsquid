@@ -101,16 +101,11 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 	return response
 }
 
-func (data *Transport) getDataOverApi() map[string]LineOfData {
-
-	quotahourly := data.HourlyQuota
-	quotadaily := data.DailyQuota
-	quotamonthly := data.MonthlyQuota
-
+func getDataOverApi(qh, qd, qm uint64, addr string) map[string]LineOfData {
 	lineOfData := LineOfData{}
 	ipToMac := map[string]LineOfData{}
 	// arrDevices := []Device{}
-	arrDevices, err := JSONClient(data.GomtcAddr, "/api/v1/devices")
+	arrDevices, err := JSONClient(addr, "/api/v1/devices")
 	if err != nil {
 		log.Error(err)
 		return ipToMac
@@ -118,13 +113,13 @@ func (data *Transport) getDataOverApi() map[string]LineOfData {
 	for _, value := range arrDevices {
 		lineOfData.Device = value
 		if value.HourlyQuota == 0 {
-			value.HourlyQuota = quotahourly
+			value.HourlyQuota = qh
 		}
 		if value.DailyQuota == 0 {
-			value.DailyQuota = quotadaily
+			value.DailyQuota = qd
 		}
 		if value.MonthlyQuota == 0 {
-			value.MonthlyQuota = quotamonthly
+			value.MonthlyQuota = qm
 		}
 		lineOfData.addressLists = strings.Split(lineOfData.AddressLists, ",")
 		lineOfData.Timeout = time.Now()
@@ -169,6 +164,12 @@ func JSONClient(server, uri string) ([]Device, error) {
 	return v, nil
 }
 
-func (data *Transport) getDevices() map[string]LineOfData {
-	return data.getDataOverApi()
+func (t *Transport) getDevices() map[string]LineOfData {
+	t.RLock()
+	qh := t.HourlyQuota
+	qd := t.DailyQuota
+	qm := t.MonthlyQuota
+	addr := t.GomtcAddr
+	t.RUnlock()
+	return getDataOverApi(qh, qd, qm, addr)
 }
