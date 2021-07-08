@@ -1,0 +1,26 @@
+#
+#       Logrotate fragment for gonflux.
+#
+/var/log/gonsquid/*.log {
+        daily
+        compress
+        delaycompress
+        rotate 365
+        missingok
+		maxsize 1024M
+        create 0644 proxy proxy
+#	prerotate
+#		test ! -x /var/www/html/screensquid/fetch.pl
+#	endscript
+#	postrotate
+#		/var/www/html/lsquid_gonsquid/lightparser.pl access.log.1 && systemctl restart gonsquid.service
+#	endscript
+#	postrotate
+#		test ! -x /var/www/html/lsquid_gonsquid/lightparser.pl access.log.1 && systemctl restart gonsquid.service
+#	endscript
+#	postrotate
+#		test ! -e /var/run/squid.pid || test ! -x /usr/sbin/squid || /usr/sbin/squid -k rotate
+#	endscript
+
+}
+

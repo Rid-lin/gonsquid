@@ -1,15 +1,15 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
+	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/go-routeros/routeros"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,21 +32,17 @@ type Transport struct {
 	fileDestination     *os.File
 	csvFiletDestination *os.File
 	conn                *net.UDPConn
-	clientROS           *routeros.Client
+	timerUpdatedevice   *time.Timer
 	renewOneMac         chan string
 	exitChan            chan os.Signal
+	Interval            string
+	GomtcAddr           string
 	QuotaType
 	sync.RWMutex
 }
 
 func NewTransport(cfg *Config) *Transport {
-
-	c, err := dial(cfg.MTAddr, cfg.MTUser, cfg.MTPass, cfg.UseTLS)
-	if err != nil {
-		log.Errorf("Error connect to %v:%v", cfg.MTAddr, err)
-		c = tryingToReconnectToMokrotik(cfg.MTAddr, cfg.MTUser, cfg.MTPass, cfg.UseTLS, cfg.NumOfTryingConnectToMT)
-	}
-	// defer c.Close()
+	var err error
 
 	fileDestination, err = os.OpenFile(cfg.NameFileToLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -72,76 +68,31 @@ func NewTransport(cfg *Config) *Transport {
 		renewOneMac:         make(chan string, 100),
 		Location:            Location,
 		exitChan:            getExitSignalsChannel(),
-		clientROS:           c,
+		Interval:            cfg.Interval,
 		fileDestination:     fileDestination,
 		csvFiletDestination: csvFiletDestination,
+		GomtcAddr:           cfg.GomtcAddr,
+		QuotaType: QuotaType{
+			HourlyQuota:  uint64(cfg.DefaultQuotaHourly * cfg.SizeOneMegabyte),
+			DailyQuota:   uint64(cfg.DefaultQuotaDaily * cfg.SizeOneMegabyte),
+			MonthlyQuota: uint64(cfg.DefaultQuotaMonthly * cfg.SizeOneMegabyte),
+		},
 	}
-}
-
-func dial(MTAddr, MTUser, MTPass string, UseTLS bool) (*routeros.Client, error) {
-	if UseTLS {
-		return routeros.DialTLS(MTAddr, MTUser, MTPass, nil)
-	}
-	return routeros.Dial(MTAddr, MTUser, MTPass)
-}
-
-func tryingToReconnectToMokrotik(MTAddr, MTUser, MTPass string, UseTLS bool, NumOfTryingConnectToMT int) *routeros.Client {
-	c, err := dial(MTAddr, MTUser, MTPass, UseTLS)
-	if err != nil {
-		if NumOfTryingConnectToMT == 0 {
-			log.Fatalf("Error connect to %v:%v", MTAddr, err)
-		} else if NumOfTryingConnectToMT < 0 {
-			NumOfTryingConnectToMT = -1
-		}
-		log.Errorf("Error connect to %v:%v", MTAddr, err)
-		time.Sleep(15 * time.Second)
-		NumOfTryingConnectToMT--
-		c = tryingToReconnectToMokrotik(MTAddr, MTUser, MTPass, UseTLS, NumOfTryingConnectToMT)
-	}
-	return c
 }
 
 func (data *Transport) GetInfo(request *request) ResponseType {
 	var response ResponseType
-
-	// timeInt, err := strconv.ParseInt(request.Time, 10, 64)
-	// if err != nil {
-	// 	log.Errorf("Error parsing timeStamp(%v) from request:%v", timeInt, err)
-	// 	//With an incorrect time, removes 30 seconds from the current time to be able to identify the IP address
-	// 	timeInt = time.Now().Add(-30 * time.Second).Unix()
-	// }
-	// request.timeInt = timeInt
 	data.RLock()
 	ipStruct, ok := data.ipToMac[request.IP]
 	data.RUnlock()
-	if ok && time.Since(ipStruct.timeout) < (5*time.Minute) {
-		log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
+	if ok {
 		response.Mac = ipStruct.Mac
-		response.IP = ipStruct.IP
-		response.HostName = ipStruct.HostName
-		response.Comments = ipStruct.Comment
-	} else if ok {
-		device := data.getInfoFromMTAboutIP(request.IP, &cfg)
-		data.updateInfoAboutIP(device)
-		log.Tracef("IP:%v to MAC:%v, hostname:%v, comment:%v", ipStruct.IP, ipStruct.Mac, ipStruct.HostName, ipStruct.Comment)
-		response.Mac = ipStruct.Mac
-		response.IP = ipStruct.IP
-		response.HostName = ipStruct.HostName
-		response.Comments = ipStruct.Comment
-		// } else if !ok {
-		// 	// TODO Make information about the mac-address loaded from the router
-		// 	log.Tracef("IP:'%v' not find in table lease of router:'%v'", ipStruct.IP, cfg.MTAddr)
-		// 	response.Mac = request.IP
-		// 	response.IP = request.IP
-	} else {
-		device := data.getInfoFromMTAboutIP(request.IP, &cfg)
-		data.updateInfoAboutIP(device)
-		log.Tracef("IP:'%v' not find in table lease of router:'%v'", ipStruct.IP, cfg.MTAddr)
-		if device.Mac == "" {
-			response.Mac = request.IP
+		if response.Mac == "" {
+			response.Mac = ipStruct.ActiveMacAddress
 		}
-		response.Mac = device.Mac
-		response.IP = request.IP
+	} else {
+		data.timerUpdatedevice.Stop()
+		data.setTimerUpdateDevice(data.Interval)
 	}
 	if response.Mac == "" {
 		response.Mac = request.IP
@@ -150,98 +101,7 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 	return response
 }
 
-func (data *Transport) getInfoFromMTAboutIP(ip string, cfg *Config) DeviceType {
-	device := DeviceType{}
-	device.IP = ip
-
-	reply2, err2 := data.clientROS.Run("/ip/dhcp-server/lease/print", "?active-address="+ip)
-	if err2 != nil {
-		log.Error(err2)
-	}
-	for _, re := range reply2.Re {
-		device.Id = re.Map[".id"]
-		// device.IP = re.Map["active-address"]
-		device.Mac = re.Map["mac-address"]
-		device.HostName = re.Map["host-name"]
-		device.Groups = re.Map["address-lists"]
-	}
-	if device.Mac == "" {
-		reply, err := data.clientROS.Run("/ip/arp/print", "?address="+ip)
-		if err != nil {
-			log.Error(err)
-		}
-		for _, re := range reply.Re {
-			device.Mac = re.Map["mac-address"]
-		}
-
-	}
-	log.Tracef("Get info from mikrotik ip(%v), device:%v\n", ip, device)
-	return device
-
-}
-
-func (data *Transport) updateInfoAboutIP(device DeviceType) {
-	data.RLock()
-	quotahourly := data.HourlyQuota
-	quotadaily := data.DailyQuota
-	quotamonthly := data.MonthlyQuota
-	data.RUnlock()
-
-	lineOfData := LineOfData{}
-	lineOfData.DeviceType = device
-	if lineOfData.HourlyQuota == 0 {
-		lineOfData.HourlyQuota = quotahourly
-	}
-	if lineOfData.DailyQuota == 0 {
-		lineOfData.DailyQuota = quotadaily
-	}
-	if lineOfData.MonthlyQuota == 0 {
-		lineOfData.MonthlyQuota = quotamonthly
-	}
-
-	if lineOfData.Mac == "" {
-		lineOfData.Mac = lineOfData.IP
-	}
-	lineOfData.timeout = time.Now().In(data.Location)
-
-	data.Lock()
-	data.ipToMac[device.IP] = lineOfData
-	data.Unlock()
-}
-
-/*
-Jun 22 21:39:13 192.168.65.1 dhcp,info dhcp_lan deassigned 192.168.65.149 from 04:D3:B5:FC:E8:09
-Jun 22 21:40:16 192.168.65.1 dhcp,info dhcp_lan assigned 192.168.65.202 to E8:6F:38:88:92:29
-*/
-
-func (data *Transport) loopGetDataFromMT() {
-	// defer func() {
-	// 	if e := recover(); e != nil {
-	// 		log.Errorf("Error while trying to get data from the router:%v", e)
-	// 	}
-	// }()
-	for {
-
-		data.Lock()
-		data.ipToMac = data.getDataFromMT()
-		data.Unlock()
-
-		// ipToMac := data.getDataFromMT()
-		// data.Lock()
-		// data.ipToMac = ipToMac
-		// data.Unlock()
-		// ipToMac = map[string]LineOfData{}
-
-		interval, err := time.ParseDuration(cfg.Interval)
-		if err != nil {
-			interval = 10 * time.Minute
-		}
-		time.Sleep(interval)
-
-	}
-}
-
-func (data *Transport) getDataFromMT() map[string]LineOfData {
+func (data *Transport) getDataOverApi() map[string]LineOfData {
 
 	quotahourly := data.HourlyQuota
 	quotadaily := data.DailyQuota
@@ -249,162 +109,66 @@ func (data *Transport) getDataFromMT() map[string]LineOfData {
 
 	lineOfData := LineOfData{}
 	ipToMac := map[string]LineOfData{}
-	reply, err := data.clientROS.Run("/ip/arp/print")
+	// arrDevices := []Device{}
+	arrDevices, err := JSONClient(data.GomtcAddr, "/api/v1/devices")
 	if err != nil {
 		log.Error(err)
+		return ipToMac
 	}
-	for _, re := range reply.Re {
-		lineOfData.IP = re.Map["address"]
-		lineOfData.Mac = re.Map["mac-address"]
-		if lineOfData.HourlyQuota == 0 {
-			lineOfData.HourlyQuota = quotahourly
+	for _, value := range arrDevices {
+		lineOfData.Device = value
+		if value.HourlyQuota == 0 {
+			value.HourlyQuota = quotahourly
 		}
-		if lineOfData.DailyQuota == 0 {
-			lineOfData.DailyQuota = quotadaily
+		if value.DailyQuota == 0 {
+			value.DailyQuota = quotadaily
 		}
-		if lineOfData.MonthlyQuota == 0 {
-			lineOfData.MonthlyQuota = quotamonthly
+		if value.MonthlyQuota == 0 {
+			value.MonthlyQuota = quotamonthly
 		}
-		lineOfData.timeout = time.Now()
+		lineOfData.addressLists = strings.Split(lineOfData.AddressLists, ",")
+		lineOfData.Timeout = time.Now()
 		ipToMac[lineOfData.IP] = lineOfData
-	}
-	reply2, err2 := data.clientROS.Run("/ip/dhcp-server/lease/print") //, "?status=bound") //, "?disabled=false")
-	if err2 != nil {
-		log.Error(err2)
-	}
-	for _, re := range reply2.Re {
-		lineOfData.Id = re.Map[".id"]
-		lineOfData.IP = re.Map["active-address"]
-		lineOfData.Mac = re.Map["active-mac-address"]
-		// lineOfData.timeoutStr = re.Map["expires-after"]
-		lineOfData.HostName = re.Map["host-name"]
-		lineOfData.Comment = re.Map["comment"]
-		lineOfData.HourlyQuota, lineOfData.DailyQuota, lineOfData.MonthlyQuota, lineOfData.Name, lineOfData.Position, lineOfData.Company, lineOfData.TypeD = parseComments(lineOfData.Comment)
-		if lineOfData.HourlyQuota == 0 {
-			lineOfData.HourlyQuota = quotahourly
-		}
-		if lineOfData.DailyQuota == 0 {
-			lineOfData.DailyQuota = quotadaily
-		}
-		if lineOfData.MonthlyQuota == 0 {
-			lineOfData.MonthlyQuota = quotamonthly
-		}
-		lineOfData.disable = re.Map["disabled"]
-		addressLists := re.Map["address-lists"]
-		lineOfData.addressLists = strings.Split(addressLists, ",")
-
-		lineOfData.timeout = time.Now()
-
-		ipToMac[lineOfData.IP] = lineOfData
-
 	}
 	return ipToMac
 }
 
-func parseComments(comment string) (
-	quotahourly, quotadaily, quotamonthly uint64,
-	name, position, company, typeD string) {
-	commentArray := strings.Split(comment, "/")
-	for _, value := range commentArray {
-		switch {
-		case strings.Contains(value, "tel"):
-			typeD = "tel"
-			name = parseParamertToStr(value)
-		case strings.Contains(value, "nb"):
-			typeD = "nb"
-			name = parseParamertToStr(value)
-		case strings.Contains(value, "ws"):
-			typeD = "ws"
-			name = parseParamertToStr(value)
-		case strings.Contains(value, "srv"):
-			typeD = "srv"
-			name = parseParamertToStr(value)
-		case strings.Contains(value, "prn"):
-			typeD = "prn"
-			name = parseParamertToStr(value)
-		case strings.Contains(value, "name"):
-			typeD = "other"
-			name = parseParamertToStr(value)
-		case strings.Contains(value, "col"):
-			position = parseParamertToStr(value)
-		case strings.Contains(value, "com"):
-			company = parseParamertToStr(value)
-		case strings.Contains(value, "quotahourly"):
-			quotahourly = parseParamertToUint(value)
-		case strings.Contains(value, "quotadaily"):
-			quotadaily = parseParamertToUint(value)
-		case strings.Contains(value, "quotamonthly"):
-			quotamonthly = parseParamertToUint(value)
-		}
-	}
-	return
+func JSONClient(server, uri string) ([]Device, error) {
+	url := server + uri
 
-}
-
-func parseParamertToStr(inpuStr string) string {
-	Arr := strings.Split(inpuStr, "=")
-	if len(Arr) > 1 {
-		return Arr[1]
-	} else {
-		log.Errorf("Parameter error. The parameter is specified incorrectly or not specified at all.(%v)", inpuStr)
-	}
-	return ""
-}
-
-func parseParamertToUint(inputValue string) (quota uint64) {
-	var err error
-	Arr := strings.Split(inputValue, "=")
-	if len(Arr) > 1 {
-		quotaStr := Arr[1]
-		quota, err = strconv.ParseUint(quotaStr, 10, 64)
-		if err != nil {
-			log.Errorf("Error parse quota from:(%v) with:(%v)", quotaStr, err)
-		}
-		return
-	} else {
-		log.Errorf("Parameter error. The parameter is specified incorrectly or not specified at all.(%v)", inputValue)
-	}
-	return
-}
-
-func (transport *Transport) syncStatusDevices(inputSync map[string]bool) {
-	result := map[string]bool{}
-	ipToMac := transport.getDataFromMT()
-	transport.Lock()
-	transport.ipToMac = ipToMac
-	transport.Unlock()
-
-	for _, value := range ipToMac {
-		for keySync := range inputSync {
-			if keySync == value.IP || keySync == value.Mac || keySync == value.HostName {
-				result[value.Id] = inputSync[keySync]
-			}
-		}
+	spaceClient := http.Client{
+		Timeout: time.Second * 10, // Timeout after 2 seconds
 	}
 
-	for key := range result {
-		err := transport.setStatusDevice(key, result[key])
-		if err != nil {
-			log.Error(err)
-		}
-	}
-}
-
-func (data *Transport) setStatusDevice(number string, status bool) error {
-
-	var statusMtT string
-	if status {
-		statusMtT = "yes"
-	} else {
-		statusMtT = "no"
-	}
-
-	reply, err := data.clientROS.Run("/ip/dhcp-server/lease/set", "=disabled="+statusMtT, "=numbers="+number)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return err
-	} else if reply.Done.Word != "!done" {
-		return fmt.Errorf("%v", reply.Done.Word)
+		return nil, err
 	}
-	log.Tracef("Response from Mikrotik(numbers):%v(%v)", reply, number)
-	return nil
+
+	// req.Header.Set("User-Agent", "spacecount-tutorial")
+
+	res, getErr := spaceClient.Do(req)
+	if getErr != nil {
+		return nil, getErr
+	}
+
+	if res.Body != nil {
+		defer res.Body.Close()
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		return nil, readErr
+	}
+	v := []Device{}
+	jsonErr := json.Unmarshal(body, &v)
+	if jsonErr != nil {
+		return nil, jsonErr
+	}
+
+	return v, nil
+}
+
+func (data *Transport) getDevices() map[string]LineOfData {
+	return data.getDataOverApi()
 }

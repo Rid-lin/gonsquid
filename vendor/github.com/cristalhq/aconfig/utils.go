@@ -42,9 +42,19 @@ func getEnv() map[string]interface{} {
 func getFlags(flagSet *flag.FlagSet) map[string]interface{} {
 	res := map[string]interface{}{}
 	flagSet.Visit(func(f *flag.Flag) {
-		res[f.Name] = f.Value
+		res[f.Name] = f.Value.String()
 	})
 	return res
+}
+
+func getActualFlag(name string, flagSet *flag.FlagSet) *flag.Flag {
+	var found *flag.Flag
+	flagSet.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = f
+		}
+	})
+	return found
 }
 
 func makeName(name string, parent *fieldData) string {
@@ -117,7 +127,20 @@ func splitNameByWords(src string) []string {
 	return words
 }
 
+// copy-paste until https://github.com/golang/go/issues/46336 is fixed
+func cut(s, sep string) (before, after string, found bool) {
+	if i := strings.Index(s, sep); i >= 0 {
+		return s[:i], s[i+len(sep):], true
+	}
+	return s, "", false
+}
+
 type jsonDecoder struct{}
+
+// Format of the decoder.
+func (d *jsonDecoder) Format() string {
+	return "json"
+}
 
 // DecodeFile implements FileDecoder.
 func (d *jsonDecoder) DecodeFile(filename string) (map[string]interface{}, error) {
@@ -134,7 +157,7 @@ func (d *jsonDecoder) DecodeFile(filename string) (map[string]interface{}, error
 	return raw, nil
 }
 
-func normalize(curr interface{}) interface{} {
+func sliceToString(curr interface{}) string {
 	switch curr := curr.(type) {
 	case []interface{}:
 		b := &strings.Builder{}
@@ -147,12 +170,8 @@ func normalize(curr interface{}) interface{} {
 		return b.String()
 	case string:
 		return curr
-	case float64:
-		return fmt.Sprint(curr)
-	case bool:
-		return fmt.Sprint(curr)
 	default:
-		panic(fmt.Sprintf("Can't normalize %T %v", curr, curr))
+		panic(fmt.Sprintf("can't normalize %T %v", curr, curr))
 	}
 }
 

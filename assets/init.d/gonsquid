@@ -1,0 +1,87 @@
+#!/sbin/openrc-run
+# Copyright 1999-2012 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# $Header: /var/cvsroot/gentoo-x86/www-servers/gonsquid/files/gonsquid.initd,v 1.21 2012/01/08 20:45:46 hwoarang Exp $
+
+description="gonsquid Go Mikrotik Traffic Controller"
+
+# extra_started_commands="reload graceful"
+# required_files=$gonsquid_CONF
+
+name=$RC_SVCNAME
+cfgfile="/etc/$RC_SVCNAME/config.yaml"
+command="/usr/local/bin/$RC_SVCNAME/${RC_SVCNAME}"
+pidfile="/run/$RC_SVCNAME.pid"
+command_background="yes"
+logpath="/var/log/$RC_SVCNAME"
+
+depend() {
+	need net
+	after firewall
+}
+
+checkconfig() {
+	if [ ! -f "${cfgfile}" ] ; then
+		ewarn "${cfgfile} does not exist."
+		return 1
+	fi
+	
+	if [ ! -f "$logpath" ] ; then
+		mkdir -p "$logpath"
+		return 0
+	fi
+
+	# if [ -z "${gonsquid_PID}" ] ; then
+		# ewarn "server.pid-file variable in ${gonsquid_CONF}"
+		# ewarn "is not set. Falling back to gonsquid.pid"
+		# gonsquid_PID="/run/gonsquid.pid"
+	# fi
+}
+
+start() {
+    ebegin "Starting gonsquid"
+    start-stop-daemon --start \
+		--exec "$command" \
+        --background \
+		--stdout "$logpath/error.log" \
+		--stderr "$logpath/error.log" \
+		--pidfile "$pidfile" --quiet \
+		--make-pidfile 
+	eend
+}
+
+stop() {
+	ebegin "Stopping gonsquid"
+	start-stop-daemon --stop --quiet "$command" \
+		--pidfile "$pidfile" --quiet
+	eend
+}
+
+# reload() {
+	# if ! service_started "${SVCNAME}" ; then
+		# eerror "${SVCNAME} isn't running"
+		# return 1
+	# fi
+	# checkconfig || return 1
+
+	# ebegin "Re-opening gonsquid log files"
+	# start-stop-daemon --quiet --pidfile "${gonsquid_PID}" \
+		# --signal HUP
+	# eend $?
+# }
+
+# graceful() {
+	# if ! service_started "${SVCNAME}" ; then
+		# eerror "${SVCNAME} isn't running"
+		# return 1
+	# fi
+	# checkconfig || return 1
+
+	# ebegin "Gracefully stopping gonsquid"
+	# start-stop-daemon --quiet --pidfile "${gonsquid_PID}" \
+		# --signal INT
+	# if eend $? ; then
+		# rm -f "${gonsquid_PID}"
+		# start
+	# fi
+# }

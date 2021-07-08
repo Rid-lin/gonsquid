@@ -72,16 +72,24 @@ func (l *Loader) tagsForField(field reflect.StructField) map[string]string {
 	return tags
 }
 
-func (l *Loader) fullTag(f *fieldData, tag string) string {
+func (l *Loader) fullTag(prefix string, f *fieldData, tag string) string {
 	sep := l.config.FlagDelimiter
 	if tag == envNameTag {
 		sep = l.config.envDelimiter
 	}
 	res := f.Tag(tag)
-	for p := f.parent; p != nil; p = p.parent {
-		res = p.Tag(tag) + sep + res
+	if res == "-" {
+		return ""
 	}
-	return res
+	if before, _, ok := cut(res, ",exact"); ok {
+		return before
+	}
+	for p := f.parent; p != nil; p = p.parent {
+		if p.Tag(tag) != "-" {
+			res = p.Tag(tag) + sep + res
+		}
+	}
+	return prefix + res
 }
 
 func (l *Loader) getFields(x interface{}) []*fieldData {
@@ -167,7 +175,25 @@ func (l *Loader) setFieldData(field *fieldData, value interface{}) error {
 		return l.setInterface(field, value)
 
 	case reflect.Slice:
-		return l.setSlice(field, fmt.Sprint(normalize(value)))
+		if field.field.Type.Elem().Kind() == reflect.Struct {
+			v, ok := value.([]interface{})
+			if !ok {
+				panic(fmt.Errorf("%T %v", value, value))
+			}
+
+			slice := reflect.MakeSlice(field.field.Type, len(v), len(v))
+			for i, val := range v {
+				vv := mii(val)
+
+				fd := l.newFieldData(reflect.StructField{}, slice.Index(i), nil)
+				if err := m2s(vv, fd.value); err != nil {
+					return err
+				}
+			}
+			field.value.Set(slice)
+			return nil
+		}
+		return l.setSlice(field, sliceToString(value))
 
 	case reflect.Map:
 		return l.setMap(field, fmt.Sprint(value))
@@ -282,4 +308,55 @@ func (l *Loader) setMap(field *fieldData, value string) error {
 	}
 	field.value.Set(mapField)
 	return nil
+}
+
+func m2s(m map[string]interface{}, structValue reflect.Value) error {
+	for name, value := range m {
+		name = strings.Title(name)
+		structFieldValue := structValue.FieldByName(name)
+		if !structFieldValue.IsValid() {
+			return fmt.Errorf("no such field %q in struct", name)
+		}
+
+		if !structFieldValue.CanSet() {
+			return fmt.Errorf("cannot set %q field value", name)
+		}
+
+		val := reflect.ValueOf(value)
+		if structFieldValue.Type() != val.Type() {
+			if structFieldValue.Kind() == reflect.Slice && val.Kind() == reflect.Slice {
+				vals := value.([]interface{})
+				slice := reflect.MakeSlice(structFieldValue.Type(), len(vals), len(vals))
+				for i := 0; i < len(vals); i++ {
+					a := mii(vals[i])
+					b := slice.Index(i)
+					if err := m2s(a, b); err != nil {
+						return err
+					}
+				}
+				structFieldValue.Set(slice)
+				continue
+			} else {
+				return fmt.Errorf("provided value type do not match struct field type (%v and %v)", structFieldValue.Type(), val.Type())
+			}
+		}
+
+		structFieldValue.Set(val)
+	}
+	return nil
+}
+
+func mii(m interface{}) map[string]interface{} {
+	switch m := m.(type) {
+	case map[string]interface{}:
+		return m
+	case map[interface{}]interface{}:
+		res := map[string]interface{}{}
+		for k, v := range m {
+			res[k.(string)] = v
+		}
+		return res
+	default:
+		panic(fmt.Sprintf("%T %v", m, m))
+	}
 }
