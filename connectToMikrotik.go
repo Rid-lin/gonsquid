@@ -134,7 +134,7 @@ func (data *Transport) getDataOverApi() map[string]LineOfData {
 }
 
 func JSONClient(server, uri string) ([]Device, error) {
-	url := "http://" + server + uri
+	url := server + uri
 
 	spaceClient := http.Client{
 		Timeout: time.Second * 10, // Timeout after 2 seconds

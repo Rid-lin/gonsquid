@@ -10,7 +10,7 @@ description="gonsquid Go Mikrotik Traffic Controller"
 
 name=$RC_SVCNAME
 cfgfile="/etc/$RC_SVCNAME/config.yaml"
-command="/usr/local/bin/gonsquid/gonsquid"
+command="/usr/local/bin/$RC_SVCNAME/${RC_SVCNAME}_v0.0.19-4-gc414f4e_linux_c414f4e_amd64"
 pidfile="/run/$RC_SVCNAME.pid"
 command_background="yes"
 logpath="/var/log/$RC_SVCNAME"

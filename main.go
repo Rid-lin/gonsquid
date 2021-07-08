@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"net"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -53,11 +54,13 @@ func main() {
 	for {
 		data.conn, err = net.ListenUDP("udp", addr)
 		if err != nil {
-			log.Errorln(err)
+			log.Errorln(err, "Sleeping 5 second")
+			time.Sleep(5 * time.Second)
 		} else {
 			err = data.conn.SetReadBuffer(cfg.ReceiveBufferSizeBytes)
 			if err != nil {
-				log.Errorln(err)
+				log.Errorln(err, "Sleeping 2 second")
+				time.Sleep(2 * time.Second)
 			} else {
 				/* Infinite-loop for reading packets */
 				for {

@@ -18,7 +18,7 @@ type Config struct {
 	SubNets                []string `default:"" usage:"List of subnets traffic between which will not be counted"`
 	IgnorList              []string `default:"" usage:"List of lines that will be excluded from the final log"`
 	LogLevel               string   `default:"info" usage:"Log level: panic, fatal, error, warn, info, debug, trace"`
-	GomtcAddr              string   `default:"127.0.0.1:3034" usage:"Address and port for connect to gomtc API"`
+	GomtcAddr              string   `default:"http://127.0.0.1:3034" usage:"Address and port for connect to gomtc API"`
 	FlowAddr               string   `default:"0.0.0.0:2055" usage:"Address and port to listen NetFlow packets"`
 	NameFileToLog          string   `default:"" usage:"The file where logs will be written in the format of squid logs"`
 	MTAddr                 string   `default:"" usage:"The address of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken"`
