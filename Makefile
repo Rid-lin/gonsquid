@@ -30,7 +30,7 @@ help: ## Display this help screen.
 
 clean: ## Clean build directory.
 	rm -f ./bin/${PROGRAM_NAME}*
-	rmdir ./bin
+#	rmdir ./bin
 
 dep: ## Download the dependencies.
 	go mod tidy
@@ -53,6 +53,10 @@ build: dep ## Build program executable for linux platform.
 build_ac: dep ## Build program executable for linux platform.
 	mkdir -p ./bin
 	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-linkmode external -extldflags '-static' -s -w" -o bin/${PROGRAM_NAME}_$(VERSION)_linux_$(COMMIT)_amd64_cgo .
+
+build_alpine: ## Build program executable for linux platform.
+	mkdir -p ./bin
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-linkmode external -extldflags '-static' -s -w" -o bin/${PROGRAM_NAME} .
 
 build_a: dep ## Build program executable for linux platform.
 	mkdir -p ./bin
