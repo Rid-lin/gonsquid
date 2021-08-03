@@ -219,22 +219,22 @@ func checkIP(subnet string, ipv4addr net.IP) (bool, error) {
 	return netA.Contains(ipv4addr), nil
 }
 
-func (data *Transport) pipeOutputToStdoutForSquid(outputChannel chan decodedRecord, cfg *Config) {
+func (t *Transport) pipeOutputToStdoutForSquid(outputChannel chan decodedRecord, cfg *Config) {
 	for record := range outputChannel {
 		log.Tracef("Get from outputChannel:%v", record)
-		message, csvMessage := data.decodeRecordToSquid(&record, cfg)
+		message, csvMessage := t.decodeRecordToSquid(&record, cfg)
 		log.Tracef("Decoded record (%v) to message (%v)", record, message)
 		message = filtredMessage(message, cfg.IgnorList)
 		if message == "" {
 			continue
 		}
-		if _, err := data.fileDestination.WriteString(message + "\n"); err != nil {
+		if _, err := t.fileDestination.WriteString(message + "\n"); err != nil {
 			log.Errorf("Error writing data buffer:%v", err)
 		} else {
 			log.Tracef("Added to log:%v", message)
 		}
 		if cfg.CSV {
-			if _, err := data.csvFiletDestination.WriteString(csvMessage + "\n"); err != nil {
+			if _, err := t.csvFiletDestination.WriteString(csvMessage + "\n"); err != nil {
 				log.Errorf("Error writing data buffer:%v", err)
 			} else {
 				log.Tracef("Added to CSV:%v", message)
