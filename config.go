@@ -7,11 +7,8 @@ import (
 
 	"github.com/cristalhq/aconfig"
 	"github.com/cristalhq/aconfig/aconfigyaml"
-
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
-
-var ConfigPath string
 
 type Config struct {
 	// ConfigFilename         string   `default:"" usage:`
@@ -59,7 +56,6 @@ func newConfig() *Config {
 		EnvPrefix:          "GONSQUID",
 		FlagPrefix:         "",
 		Files: []string{
-			ConfigPath,
 			"./config.yaml",
 			"./config/config.yaml",
 			"/etc/gonsquid/config.yaml",
@@ -81,20 +77,20 @@ func newConfig() *Config {
 		panic(err)
 	}
 
-	lvl, err := log.ParseLevel(cfg.LogLevel)
+	lvl, err := logrus.ParseLevel(cfg.LogLevel)
 	if err != nil {
-		log.Errorf("Error parse the level of logs (%v). Installed by default = Info", cfg.LogLevel)
-		lvl, _ = log.ParseLevel("info")
+		logrus.Errorf("Error parse the level of logs (%v). Installed by default = Info", cfg.LogLevel)
+		lvl, _ = logrus.ParseLevel("info")
 	}
-	log.SetLevel(lvl)
+	logrus.SetLevel(lvl)
 
 	cfg.Location, err = time.LoadLocation(cfg.Loc)
 	if err != nil {
-		log.Errorf("Error loading Location(%v):%v", cfg.Loc, err)
+		logrus.Errorf("Error loading Location(%v):%v", cfg.Loc, err)
 		cfg.Location = time.UTC
 	}
 
-	log.Debugf("Config %#v:", cfg)
+	logrus.Debugf("Config %#v:", cfg)
 
 	return &cfg
 }

@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 // NetFlow v5 implementation
@@ -198,7 +198,7 @@ func (cfg *Config) CheckEntryInSubNet(ipv4addr net.IP) bool {
 	for _, subNet := range cfg.SubNets {
 		ok, err := checkIP(subNet, ipv4addr)
 		if err != nil { // если ошибка, то следующая строка
-			log.Error("Error while determining the IP subnet address:", err)
+			logrus.Error("Error while determining the IP subnet address:", err)
 			return false
 
 		}
@@ -221,23 +221,23 @@ func checkIP(subnet string, ipv4addr net.IP) (bool, error) {
 
 func (t *Transport) pipeOutputToStdoutForSquid(outputChannel chan decodedRecord, cfg *Config) {
 	for record := range outputChannel {
-		log.Tracef("Get from outputChannel:%v", record)
+		logrus.Tracef("Get from outputChannel:%v", record)
 		message, csvMessage := t.decodeRecordToSquid(&record, cfg)
-		log.Tracef("Decoded record (%v) to message (%v)", record, message)
+		logrus.Tracef("Decoded record (%v) to message (%v)", record, message)
 		message = filtredMessage(message, cfg.IgnorList)
 		if message == "" {
 			continue
 		}
 		if _, err := t.fileDestination.WriteString(message + "\n"); err != nil {
-			log.Errorf("Error writing data buffer:%v", err)
+			logrus.Errorf("Error writing data buffer:%v", err)
 		} else {
-			log.Tracef("Added to log:%v", message)
+			logrus.Tracef("Added to log:%v", message)
 		}
 		if cfg.CSV {
 			if _, err := t.csvFiletDestination.WriteString(csvMessage + "\n"); err != nil {
-				log.Errorf("Error writing data buffer:%v", err)
+				logrus.Errorf("Error writing data buffer:%v", err)
 			} else {
-				log.Tracef("Added to CSV:%v", message)
+				logrus.Tracef("Added to CSV:%v", message)
 			}
 		}
 	}
@@ -246,7 +246,7 @@ func (t *Transport) pipeOutputToStdoutForSquid(outputChannel chan decodedRecord,
 func filtredMessage(message string, IgnorList []string) string {
 	for _, ignorStr := range IgnorList {
 		if strings.Contains(message, ignorStr) {
-			log.Tracef("Line of log :%v contains ignorstr:%v, skipping...", message, ignorStr)
+			logrus.Tracef("Line of log :%v contains ignorstr:%v, skipping...", message, ignorStr)
 			return ""
 		}
 	}
@@ -276,19 +276,19 @@ func handlePacket(buf *bytes.Buffer, remoteAddr *net.UDPAddr, outputChannel chan
 	header := header{}
 	err := binary.Read(buf, binary.BigEndian, &header)
 	if err != nil {
-		log.Printf("Error: %v\n", err)
+		logrus.Printf("Error: %v\n", err)
 	} else {
 
 		for i := 0; i < int(header.FlowRecords); i++ {
 			record := binaryRecord{}
 			err := binary.Read(buf, binary.BigEndian, &record)
 			if err != nil {
-				log.Printf("binary.Read failed: %v\n", err)
+				logrus.Printf("binary.Read failed: %v\n", err)
 				break
 			}
 
 			decodedRecord := decodeRecord(&header, &record, remoteAddr, cfg)
-			log.Tracef("Send to outputChannel:%v", decodedRecord)
+			logrus.Tracef("Send to outputChannel:%v", decodedRecord)
 			outputChannel <- decodedRecord
 		}
 	}

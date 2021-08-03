@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 type request struct {
@@ -47,19 +47,19 @@ func NewTransport(cfg *Config) *Transport {
 	fileDestination, err = os.OpenFile(cfg.NameFileToLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fileDestination.Close()
-		log.Fatalf("Error, the '%v' file could not be created (there are not enough premissions or it is busy with another program): %v", cfg.NameFileToLog, err)
+		logrus.Fatalf("Error, the '%v' file could not be created (there are not enough premissions or it is busy with another program): %v", cfg.NameFileToLog, err)
 	}
 	if cfg.CSV {
 		csvFiletDestination, err = os.OpenFile(cfg.NameFileToLog+".csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			fileDestination.Close()
-			log.Fatalf("Error, the '%v' file could not be created (there are not enough premissions or it is busy with another program): %v", cfg.NameFileToLog, err)
+			logrus.Fatalf("Error, the '%v' file could not be created (there are not enough premissions or it is busy with another program): %v", cfg.NameFileToLog, err)
 		}
 	}
 
 	Location, err := time.LoadLocation(cfg.Loc)
 	if err != nil {
-		log.Errorf("Error loading Location(%v):%v", cfg.Loc, err)
+		logrus.Errorf("Error loading Location(%v):%v", cfg.Loc, err)
 		Location = time.UTC
 	}
 
@@ -107,7 +107,7 @@ func getDataOverApi(qh, qd, qm uint64, addr string) map[string]LineOfData {
 	// arrDevices := []Device{}
 	arrDevices, err := JSONClient(addr, "/api/v1/devices")
 	if err != nil {
-		log.Error(err)
+		logrus.Error(err)
 		return ipToMac
 	}
 	for _, value := range arrDevices {

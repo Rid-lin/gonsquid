@@ -2,19 +2,11 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"net"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
-
-func init() {
-	flag.StringVar(&ConfigPath,
-		"config_path",
-		"",
-		"path to config file")
-}
 
 func main() {
 	var (
@@ -45,21 +37,21 @@ func main() {
 	go data.pipeOutputToStdoutForSquid(outputChannel, cfg)
 
 	/* Start listening on the specified port */
-	log.Infof("Start listening to NetFlow stream on %v", cfg.FlowAddr)
+	logrus.Infof("Start listening to NetFlow stream on %v", cfg.FlowAddr)
 	addr, err := net.ResolveUDPAddr("udp", cfg.FlowAddr)
 	if err != nil {
-		log.Fatalf("Error: %v\n", err)
+		logrus.Fatalf("Error: %v\n", err)
 	}
 
 	for {
 		data.conn, err = net.ListenUDP("udp", addr)
 		if err != nil {
-			log.Errorln(err, "Sleeping 5 second")
+			logrus.Errorln(err, "Sleeping 5 second")
 			time.Sleep(5 * time.Second)
 		} else {
 			err = data.conn.SetReadBuffer(cfg.ReceiveBufferSizeBytes)
 			if err != nil {
-				log.Errorln(err, "Sleeping 2 second")
+				logrus.Errorln(err, "Sleeping 2 second")
 				time.Sleep(2 * time.Second)
 			} else {
 				/* Infinite-loop for reading packets */
@@ -68,7 +60,7 @@ func main() {
 					rlen, remote, err := data.conn.ReadFromUDP(buf)
 
 					if err != nil {
-						log.Errorf("Error: %v\n", err)
+						logrus.Errorf("Error: %v\n", err)
 					} else {
 
 						stream := bytes.NewBuffer(buf[:rlen])
