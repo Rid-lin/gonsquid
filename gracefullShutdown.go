@@ -22,10 +22,13 @@ func getExitSignalsChannel() chan os.Signal {
 
 }
 
-func (transport *Transport) Exit() {
-	<-transport.exitChan
-	transport.fileDestination.Close()
-	transport.conn.Close()
+func (t *Transport) Exit(cfg *Config) {
+	<-t.exitChan
+	t.fileDestination.Close()
+	if cfg.CSV {
+		t.csvFiletDestination.Close()
+	}
+	t.conn.Close()
 	log.Println("Shutting down")
 	os.Exit(0)
 

@@ -37,7 +37,7 @@ func main() {
 		}
 	}(cfg)
 
-	go data.Exit()
+	go data.Exit(cfg)
 
 	/* Create output pipe */
 	outputChannel := make(chan decodedRecord, 100)
