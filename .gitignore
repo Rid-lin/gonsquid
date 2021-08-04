@@ -13,12 +13,12 @@ build/*
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+logs/*
 *.log
 .vscode/*
-.vscode/launch.json
 SQL/*
 bin/*
 config.toml
-gonsquid.service
 db/*
 *_old
+
