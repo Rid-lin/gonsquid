@@ -1,8 +1,8 @@
-# Minimalist Netflow v5 to squid-log collector written in Go
+# Minimalist Netflow v5 to squid-log and CSV collector written in Go
 
-The broker listens on UDP port (default 2055), accepts Netflow traffic, and by default collects records with selected metadata formatted into squid log. Login information replaces the Mac address of the device that receives from the router mikrotik.
+The broker listens on UDP port (default 2055), accepts Netflow v5 traffic, and by default collects records with selected metadata formatted into squid log. Login information replaces the Mac address of the device that receives from the router mikrotik.
 
-To build the report, it uses the [screensquid](https://sourceforge.net/projects/screen-squid/) database and its part (fetch.pl) for parsing and loading the squid log into the database
+Any squid log analyzer can be used to generate reports. For example: [screensquid](https://sourceforge.net/projects/screen-squid/)
 
 ## Usage
 
@@ -58,51 +58,41 @@ Add a task to cron (start every 5 minutes)
 
 ## Supported command line parameters
 
-```
+```bash
 Usage of gonsquid.exe:
-  -bind_addr string
-        Listen address for response mac-address from mikrotik (default ":3030")
-  -csv string
-        Output to csv (default "false")
-  -default_quota_daily string
-        Default daily traffic consumption quota (default "0")
-  -default_quota_hourly string
-        Default hourly traffic consumption quota (default "0")
-  -default_quota_monthly string
-        Default monthly traffic consumption quota (default "0")
+-csv string
+      Output to a CSV file, equivalent to the setting for squid 4.0+ in squid.conf 'logformat csv %{%Y|%b|%d|%H|%M|%S|%z}tl|%tr|%st|%>a|%>A|%>p|%>eui|%<a|%<p|%ru|%Ss|%03>Hs|%rm|%[un|%Sh/%<a|%mt' (default "false")
   -flow_addr string
-        Address and port to listen NetFlow packets (default "0.0.0.0:2055")
+      Address and port to listen NetFlow packets (default "0.0.0.0:2055")
+  -gomtc_addr string
+      Address and port for connect to gomtc API (default "http://127.0.0.1:3034")
   -ignor_list string
-        List of lines that will be excluded from the final log
+      List of lines that will be excluded from the final log
   -interval string
-        Interval to getting info from Mikrotik (default "10m")
+      Interval to getting info from Mikrotik (default "10m")
   -loc string
-        Location for time (default "Asia/Yekaterinburg")
+      Location for time (default "Asia/Yekaterinburg")
   -log_level string
-        Log level: panic, fatal, error, warn, info, debug, trace (default "info")
+      Log level: panic, fatal, error, warn, info, debug, trace (default "info")
   -mt_addr string
-        The address of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken
+      The address of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken
   -mt_pass string
-        The password of the user of the Mikrotik router, from which the data on the comparison of the mac-address and IP-address is taken      
+      The password of the user of the Mikrotik router, from which the data on the comparison of the mac-address and IP-address is taken
   -mt_user string
-        User of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken
+      User of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken
   -name_file_to_log string
-        The file where logs will be written in the format of squid logs
+      The file where logs will be written in the format of squid logs (default "access.log")
   -num_of_trying_connect_to_mt string
-        The number of attempts to connect to the microtik router (default "10")
+      The number of attempts to connect to the microtik router (default "10")
   -receive_buffer_size_bytes string
-        Size of RxQueue, i.e. value for SO_RCVBUF in bytes
-  -size_one_megabyte string
-        The number of bytes in one megabyte (default "1048576")
+      Size of RxQueue, i.e. value for SO_RCVBUF in bytes
   -sub_nets string
-        List of subnets traffic between which will not be counted
-  -use_tls string
-        Using TLS to connect to a router (default "false")
+      List of subnets traffic between which will not be counted
 ```
 
 ## Credits
 
 This project was created with help of:
 
-* https://github.com/strzinek/gonflux
-* https://sourceforge.net/projects/screen-squid/
+* <https://github.com/strzinek/gonflux>
+* <https://sourceforge.net/projects/screen-squid/>

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"net"
+	"net/http"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -17,24 +18,30 @@ func main() {
 
 	// cache.cache = make(map[string]cacheRecord)
 
-	data := NewTransport(cfg)
+	t := NewTransport(cfg)
 	/*Creating a channel to intercept the program end signal*/
+
+	go t.Exit(cfg)
 
 	// Endless file parsing loop
 	go func(cfg *Config) {
-		data.runOnce(cfg)
+		t.runOnce(cfg)
 		for {
-			<-data.timerUpdatedevice.C
-			data.runOnce(cfg)
+			<-t.timerUpdatedevice.C
+			t.runOnce(cfg)
 		}
 	}(cfg)
 
-	go data.Exit(cfg)
+	go func(cfg *Config, t *Transport) {
+		if err := http.ListenAndServe(cfg.BindAddr, t.router); err != nil {
+			logrus.Fatal(err)
+		}
+	}(cfg, t)
 
 	/* Create output pipe */
 	outputChannel := make(chan decodedRecord, 100)
 
-	go data.pipeOutputToStdoutForSquid(outputChannel, cfg)
+	go t.pipeOutputToStdoutForSquid(outputChannel, cfg)
 
 	/* Start listening on the specified port */
 	logrus.Infof("Start listening to NetFlow stream on %v", cfg.FlowAddr)
@@ -44,12 +51,12 @@ func main() {
 	}
 
 	for {
-		data.conn, err = net.ListenUDP("udp", addr)
+		t.conn, err = net.ListenUDP("udp", addr)
 		if err != nil {
 			logrus.Errorln(err, "Sleeping 5 second")
 			time.Sleep(5 * time.Second)
 		} else {
-			err = data.conn.SetReadBuffer(cfg.ReceiveBufferSizeBytes)
+			err = t.conn.SetReadBuffer(cfg.ReceiveBufferSizeBytes)
 			if err != nil {
 				logrus.Errorln(err, "Sleeping 2 second")
 				time.Sleep(2 * time.Second)
@@ -57,7 +64,7 @@ func main() {
 				/* Infinite-loop for reading packets */
 				for {
 					buf := make([]byte, 4096)
-					rlen, remote, err := data.conn.ReadFromUDP(buf)
+					rlen, remote, err := t.conn.ReadFromUDP(buf)
 
 					if err != nil {
 						logrus.Errorf("Error: %v\n", err)

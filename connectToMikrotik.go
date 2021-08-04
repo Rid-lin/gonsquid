@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,6 +30,7 @@ type ResponseType struct {
 
 type Transport struct {
 	ipToMac             map[string]LineOfData
+	router              *mux.Router
 	Location            *time.Location
 	fileDestination     *os.File
 	csvFiletDestination *os.File
@@ -37,7 +40,7 @@ type Transport struct {
 	exitChan            chan os.Signal
 	Interval            string
 	GomtcAddr           string
-	QuotaType
+	// QuotaType
 	sync.RWMutex
 }
 
@@ -63,21 +66,24 @@ func NewTransport(cfg *Config) *Transport {
 		Location = time.UTC
 	}
 
-	return &Transport{
+	t := &Transport{
 		ipToMac:             make(map[string]LineOfData),
 		renewOneMac:         make(chan string, 100),
+		router:              mux.NewRouter(),
 		Location:            Location,
 		exitChan:            getExitSignalsChannel(),
 		Interval:            cfg.Interval,
 		fileDestination:     fileDestination,
 		csvFiletDestination: csvFiletDestination,
 		GomtcAddr:           cfg.GomtcAddr,
-		QuotaType: QuotaType{
-			HourlyQuota:  uint64(cfg.DefaultQuotaHourly * cfg.SizeOneMegabyte),
-			DailyQuota:   uint64(cfg.DefaultQuotaDaily * cfg.SizeOneMegabyte),
-			MonthlyQuota: uint64(cfg.DefaultQuotaMonthly * cfg.SizeOneMegabyte),
-		},
+		// QuotaType: QuotaType{
+		// 	HourlyQuota:  uint64(cfg.DefaultQuotaHourly * cfg.SizeOneMegabyte),
+		// 	DailyQuota:   uint64(cfg.DefaultQuotaDaily * cfg.SizeOneMegabyte),
+		// 	MonthlyQuota: uint64(cfg.DefaultQuotaMonthly * cfg.SizeOneMegabyte),
+		// },
 	}
+	t.configureRouter()
+	return t
 }
 
 func (data *Transport) GetInfo(request *request) ResponseType {
@@ -101,7 +107,9 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 	return response
 }
 
-func getDataOverApi(qh, qd, qm uint64, addr string) map[string]LineOfData {
+func getDataOverApi(
+	// qh, qd, qm uint64,
+	addr string) map[string]LineOfData {
 	lineOfData := LineOfData{}
 	ipToMac := map[string]LineOfData{}
 	// arrDevices := []Device{}
@@ -112,15 +120,15 @@ func getDataOverApi(qh, qd, qm uint64, addr string) map[string]LineOfData {
 	}
 	for _, value := range arrDevices {
 		lineOfData.Device = value
-		if value.HourlyQuota == 0 {
-			value.HourlyQuota = qh
-		}
-		if value.DailyQuota == 0 {
-			value.DailyQuota = qd
-		}
-		if value.MonthlyQuota == 0 {
-			value.MonthlyQuota = qm
-		}
+		// if value.HourlyQuota == 0 {
+		// 	value.HourlyQuota = qh
+		// }
+		// if value.DailyQuota == 0 {
+		// 	value.DailyQuota = qd
+		// }
+		// if value.MonthlyQuota == 0 {
+		// 	value.MonthlyQuota = qm
+		// }
 		lineOfData.addressLists = strings.Split(lineOfData.AddressLists, ",")
 		lineOfData.Timeout = time.Now()
 		ipToMac[lineOfData.IP] = lineOfData
@@ -132,15 +140,13 @@ func JSONClient(server, uri string) ([]Device, error) {
 	url := server + uri
 
 	spaceClient := http.Client{
-		Timeout: time.Second * 10, // Timeout after 2 seconds
+		Timeout: time.Second * 10, // Timeout after 10 seconds
 	}
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	// req.Header.Set("User-Agent", "spacecount-tutorial")
 
 	res, getErr := spaceClient.Do(req)
 	if getErr != nil {
@@ -155,21 +161,23 @@ func JSONClient(server, uri string) ([]Device, error) {
 	if readErr != nil {
 		return nil, readErr
 	}
-	v := []Device{}
-	jsonErr := json.Unmarshal(body, &v)
+	d := []Device{}
+	jsonErr := json.Unmarshal(body, &d)
 	if jsonErr != nil {
 		return nil, jsonErr
 	}
 
-	return v, nil
+	return d, nil
 }
 
 func (t *Transport) getDevices() map[string]LineOfData {
 	t.RLock()
-	qh := t.HourlyQuota
-	qd := t.DailyQuota
-	qm := t.MonthlyQuota
+	// qh := t.HourlyQuota
+	// qd := t.DailyQuota
+	// qm := t.MonthlyQuota
 	addr := t.GomtcAddr
 	t.RUnlock()
-	return getDataOverApi(qh, qd, qm, addr)
+	return getDataOverApi(
+		// qh, qd, qm,
+		addr)
 }

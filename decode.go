@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -119,19 +120,32 @@ func (t *Transport) decodeRecordToSquid(record *decodedRecord, cfg *Config) (str
 		protocol = "OTHER_PACKET"
 	}
 
+	tm := time.Unix(int64(header.UnixSec), 0).In(cfg.Location)
+	year := tm.Year()
+	month := tm.Month()
+	day := tm.Day()
+	hour := tm.Hour()
+	minute := tm.Minute()
+	second := tm.Second()
+	tz := tm.Format("-0700")
+
 	ok := cfg.CheckEntryInSubNet(intToIPv4Addr(binRecord.Ipv4DstAddrInt))
 	ok2 := cfg.CheckEntryInSubNet(intToIPv4Addr(binRecord.Ipv4SrcAddrInt))
 
 	if ok && !ok2 {
+		ipDst := intToIPv4Addr(binRecord.Ipv4DstAddrInt).String()
+		if inIgnor(ipDst, cfg.IgnorList) {
+			return "", ""
+		}
 		response := t.GetInfo(&request{
-			IP:   intToIPv4Addr(binRecord.Ipv4DstAddrInt).String(),
+			IP:   ipDst,
 			Time: fmt.Sprint(header.UnixSec)})
 		message = fmt.Sprintf("%v.000 %6v %v %v/- %v HEAD %v:%v %v FIRSTUP_PARENT/%v packet_netflow/:%v %v %v",
-			header.UnixSec,                                   // time
-			binRecord.LastInt-binRecord.FirstInt,             //delay
-			intToIPv4Addr(binRecord.Ipv4DstAddrInt).String(), // dst ip
-			protocol,          // protocol
-			binRecord.InBytes, // size
+			header.UnixSec,                       // time
+			binRecord.LastInt-binRecord.FirstInt, //delay
+			ipDst,                                // dst ip
+			protocol,                             // protocol
+			binRecord.InBytes,                    // size
 			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), //src ip
 			binRecord.L4SrcPort, // src port
 			response.Mac,        // dstmac
@@ -141,31 +155,64 @@ func (t *Transport) decodeRecordToSquid(record *decodedRecord, cfg *Config) (str
 			response.HostName,
 			response.Comments,
 		)
-		message2 = fmt.Sprintf("%v,%v,%v,%v,%v,%v,%v,%v,%v,%v,%v,non_inverse,%v",
-			header.UnixSec,                       // time
-			binRecord.LastInt-binRecord.FirstInt, // delay
-			binRecord.InBytes,                    // size
-			protocol,                             // protocol
-			remoteAddr,                           // routerIP
-			intToIPv4Addr(binRecord.Ipv4DstAddrInt).String(), // dst ip
-			binRecord.L4SrcPort, // src port
-			response.Mac,        // dstmac
-			response.HostName,
-			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), // src ip
-			binRecord.L4DstPort, // dstport
-			response.Comments,
+		// 1628047627|2021|Aug|04|08|27|07|+0500|44459|9193|192.168.65.195|192.168.65.195|53062|c8:58:c0:38:68:a5|94.100.180.59|443|portal.mail.ru:443|TCP_TUNNEL|200|CONNECT|C8:58:C0:38:68:A5|HIER_DIRECT/94.100.180.59|-
+
+		message2 = fmt.Sprintf("%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v:%v|%v|%v|%v|%v|%v|%v|%v",
+			header.UnixSec,                       // unix timestamp 1628047627
+			year,                                 // year - 2021
+			month.String(),                       //month Aug
+			day,                                  // day 04
+			hour,                                 //hour 08
+			minute,                               // minute 27
+			second,                               // second 07
+			tz,                                   //timezone +0500
+			binRecord.LastInt-binRecord.FirstInt, // delay 44459
+			binRecord.InBytes,                    // size 9193
+			ipDst,                                // dst ip 192.168.65.195
+			response.HostName,                    // dst ip 192.168.65.195
+			binRecord.L4SrcPort,                  // dst port 53062
+			response.Mac,                         // dstmac c8:58:c0:38:68:a5
+			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), // src ip 94.100.180.59
+			binRecord.L4DstPort, // src port 443
+			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), binRecord.L4DstPort, // src ip portal.mail.ru:443
+			"NF_PACKET", // protocol TCP_TUNNEL
+			"200",       // 200
+			protocol,    // CONNECT
+			response.Mac,
+			"DATA_FROM/",
+			remoteAddr, // routerIP 94.100.180.59
+			"-",
 		)
 
+		// message2 = fmt.Sprintf("%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v,non_inverse,%v",
+		// 	header.UnixSec,                       // time
+		// 	binRecord.LastInt-binRecord.FirstInt, // delay
+		// 	binRecord.InBytes,                    // size
+		// 	protocol,                             // protocol
+		// 	remoteAddr,                           // routerIP
+		// 	intToIPv4Addr(binRecord.Ipv4DstAddrInt).String(), // dst ip
+		// 	binRecord.L4SrcPort, // src port
+		// 	response.Mac,        // dstmac
+		// 	response.HostName,
+		// 	intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), // src ip
+		// 	binRecord.L4DstPort, // dstport
+		// 	response.Comments,
+		// )
+
 	} else if !ok && ok2 {
+		ipDst := intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String()
+		if inIgnor(ipDst, cfg.IgnorList) {
+			return "", ""
+		}
 		response := t.GetInfo(&request{
-			IP:   intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(),
+			IP:   ipDst,
 			Time: fmt.Sprint(header.UnixSec)})
 		message = fmt.Sprintf("%v.000 %6v %v %v/- %v HEAD %v:%v %v FIRSTUP_PARENT/%v packet_netflow_inverse/:%v %v %v",
-			header.UnixSec,                                   // time
-			binRecord.LastInt-binRecord.FirstInt,             //delay
-			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), //src ip - Local
-			protocol,          // protocol
-			binRecord.InBytes, // size
+			header.UnixSec,                       // time
+			binRecord.LastInt-binRecord.FirstInt, //delay
+			ipDst,                                //src ip - Local
+			protocol,                             // protocol
+			binRecord.InBytes,                    // size
 			intToIPv4Addr(binRecord.Ipv4DstAddrInt).String(), // dst ip - Inet
 			binRecord.L4DstPort, // dstport
 			response.Mac,        // dstmac
@@ -175,20 +222,47 @@ func (t *Transport) decodeRecordToSquid(record *decodedRecord, cfg *Config) (str
 			response.HostName,
 			response.Comments,
 		)
-		message2 = fmt.Sprintf("%v,%v,%v,%v,%v,%v,%v,%v,%v,%v,%v,inverse,%v",
-			header.UnixSec,                       // time
-			binRecord.LastInt-binRecord.FirstInt, //delay
-			binRecord.InBytes,                    // size
-			protocol,                             // protocol
-			remoteAddr,                           // routerIP
-			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), //src ip - Local (reverses dst ip)
-			binRecord.L4SrcPort, // src port (reverses dst port)
-			response.Mac,        // dstmac (reverses src mac)
-			response.HostName,
-			intToIPv4Addr(binRecord.Ipv4DstAddrInt).String(), // dst ip - Inet  (reverses src ip)
-			binRecord.L4DstPort, // dstport  (reverses src port)
-			response.Comments,
+		message2 = fmt.Sprintf("%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v|%v:%v|%v|%v|%v|%v|%v|%v|%v",
+			header.UnixSec,                       // unix timestamp 1628047627
+			year,                                 // year - 2021
+			month.String(),                       //month Aug
+			day,                                  // day 04
+			hour,                                 //hour 08
+			minute,                               // minute 27
+			second,                               // second 07
+			tz,                                   //timezone +0500
+			binRecord.LastInt-binRecord.FirstInt, // delay 44459
+			binRecord.InBytes,                    // size 9193
+			ipDst,                                // dst ip 192.168.65.195
+			response.HostName,                    // dst ip 192.168.65.195
+			binRecord.L4SrcPort,                  // dst port 53062
+			response.Mac,                         // dstmac c8:58:c0:38:68:a5
+			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), // src ip 94.100.180.59
+			binRecord.L4DstPort, // src port 443
+			intToIPv4Addr(binRecord.Ipv4SrcAddrInt).String(), binRecord.L4DstPort, // src ip portal.mail.ru:443
+			"NF_PACKET", // protocol TCP_TUNNEL
+			"200",       // 200
+			protocol,    // CONNECT
+			response.Mac,
+			"DATA_FROM/",
+			remoteAddr, // routerIP 94.100.180.59
+			"-",
 		)
+
+		// message2 = fmt.Sprintf("%v,%v,%v,%v,%v,%v,%v,%v,%v,%v,%v,inverse,%v",
+		// 	header.UnixSec,                       // time
+		// 	binRecord.LastInt-binRecord.FirstInt, //delay
+		// 	binRecord.InBytes,                    // size
+		// 	protocol,                             // protocol
+		// 	remoteAddr,                           // routerIP
+		// 	ipDst, 									//src ip - Local (reverses dst ip)
+		// 	binRecord.L4SrcPort, 					// src port (reverses dst port)
+		// 	response.Mac,        					// dstmac (reverses src mac)
+		// 	response.HostName,
+		// 	intToIPv4Addr(binRecord.Ipv4DstAddrInt).String(), // dst ip - Inet  (reverses src ip)
+		// 	binRecord.L4DstPort, // dstport  (reverses src port)
+		// 	response.Comments,
+		// )
 
 	}
 	return message, message2
@@ -251,6 +325,16 @@ func filtredMessage(message string, IgnorList []string) string {
 		}
 	}
 	return message
+}
+
+func inIgnor(message string, IgnorList []string) bool {
+	for _, ignorStr := range IgnorList {
+		if strings.Contains(message, ignorStr) {
+			logrus.Tracef("Line of log :%v contains ignorstr:%v, skipping...", message, ignorStr)
+			return true
+		}
+	}
+	return false
 }
 
 // type cacheRecord struct {

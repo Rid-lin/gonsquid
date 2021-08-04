@@ -4,12 +4,12 @@ import (
 	"time"
 )
 
-type QuotaType struct {
-	HourlyQuota  uint64
-	DailyQuota   uint64
-	MonthlyQuota uint64
-	Blocked      bool
-}
+// type QuotaType struct {
+// 	HourlyQuota  uint64
+// 	DailyQuota   uint64
+// 	MonthlyQuota uint64
+// 	Blocked      bool
+// }
 
 type LineOfData struct {
 	Comment,
