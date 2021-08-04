@@ -1,14 +1,16 @@
 #
-#       Logrotate fragment for gonflux.
+#       Logrotate fragment for gonsquid.
 #
 /var/log/gonsquid/*.log {
         daily
         compress
+        dateext
         delaycompress
+		dateyesterday
         rotate 365
         missingok
-		maxsize 1024M
-        create 0644 proxy proxy
+		minsize 1M
+        create 0644 root root
 #	prerotate
 #		test ! -x /var/www/html/screensquid/fetch.pl
 #	endscript

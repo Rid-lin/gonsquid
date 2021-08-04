@@ -1,9 +1,6 @@
 #!/sbin/openrc-run
-# Copyright 1999-2012 Gentoo Foundation
-# Distributed under the terms of the GNU General Public License v2
-# $Header: /var/cvsroot/gentoo-x86/www-servers/gonsquid/files/gonsquid.initd,v 1.21 2012/01/08 20:45:46 hwoarang Exp $
 
-description="gonsquid Go Mikrotik Traffic Controller"
+description="gonsquid - Netflow traffic collector"
 
 # extra_started_commands="reload graceful"
 # required_files=$gonsquid_CONF

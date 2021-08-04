@@ -1,0 +1,18 @@
+[Unit]
+  Description=Netflow to squid-log file translator
+  After=network.target
+ 
+[Service]
+  ExecStart=/usr/local/bin/gonsquid -config=/etc/gonsquid/config.toml
+  ExecStop=/bin/kill -HUP $MAINPID
+  Type=idle
+  KillMode=process
+  Restart=on-failure
+
+  SyslogIdentifier=gonsquid
+  SyslogFacility=daemon
+  User=proxy
+  Group=proxy
+ 
+[Install]
+  WantedBy=multiuser.target
