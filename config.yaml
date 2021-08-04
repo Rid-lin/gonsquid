@@ -7,17 +7,10 @@ ignor_list:
   - '10.61.152.2'
   - '10.50.4.62:53'
   - 'ff02::'
-friends:
-  # - 'B8:27:EB:49:AE:AF'
-  # - '00:15:5D:98:0A:02'
-  # - '3C:EC:EF:00:24:4D'
-  # - 'E8:D8:D1:47:55:93'
-  # - 'EC:AA:25:D7:FE:3A'
-  # - '18:56:80:D2:AE:2E'
 flow_port: '2055'
 log_level: debug
 name_file_to_log: ./logs/access.log
 config_path: ./config
 pidfile: ./gosquid.pid
-csv: false
+csv: true
 receive_buffer_size_bytes: 212992
