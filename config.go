@@ -11,28 +11,28 @@ import (
 )
 
 type Config struct {
-	// ConfigFilename         string   `default:"" usage:`
+	BindAddr               string   `default:"0.0.0.0:30340" usage:"Listen address for HTTP-server"`
 	SubNets                []string `default:"" usage:"List of subnets traffic between which will not be counted"`
 	IgnorList              []string `default:"" usage:"List of lines that will be excluded from the final log"`
 	LogLevel               string   `default:"info" usage:"Log level: panic, fatal, error, warn, info, debug, trace"`
-	GomtcAddr              string   `default:"http://127.0.0.1:3034" usage:"Address and port for connect to gomtc API"`
+	GomtcAddr              string   `default:"http://127.0.0.1:3034" usage:"Address and port for connect to GOMTC API"`
 	FlowAddr               string   `default:"0.0.0.0:2055" usage:"Address and port to listen NetFlow packets"`
-	NameFileToLog          string   `default:"" usage:"The file where logs will be written in the format of squid logs"`
-	MTAddr                 string   `default:"" usage:"The address of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken"`
-	MTUser                 string   `default:"" usage:"User of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken"`
-	MTPass                 string   `default:"" usage:"The password of the user of the Mikrotik router, from which the data on the comparison of the mac-address and IP-address is taken"`
+	NameFileToLog          string   `default:"access.log" usage:"The file where logs will be written in the format of squid logs"`
 	Loc                    string   `default:"Asia/Yekaterinburg" usage:"Location for time"`
-	Interval               string   `default:"10m" usage:"Interval to getting info from Mikrotik"`
+	Interval               string   `default:"1m" usage:"Interval to getting info from GOMTC"`
 	ReceiveBufferSizeBytes int      `default:"" usage:"Size of RxQueue, i.e. value for SO_RCVBUF in bytes"`
-	NumOfTryingConnectToMT int      `default:"10" usage:"The number of attempts to connect to the microtik router"`
-	DefaultQuotaHourly     uint     `default:"0" usage:"Default hourly traffic consumption quota"`
-	DefaultQuotaDaily      uint     `default:"0" usage:"Default daily traffic consumption quota"`
-	DefaultQuotaMonthly    uint     `default:"0" usage:"Default monthly traffic consumption quota"`
-	SizeOneMegabyte        uint     `default:"1048576" usage:"The number of bytes in one megabyte"`
-	UseTLS                 bool     `default:"false" usage:"Using TLS to connect to a router"`
-	CSV                    bool     `default:"false" usage:"Output to csv"`
-	UseOnlyAPI             bool     `default:"true" usage:"Use only gomt API"`
+	CSV                    bool     `default:"false" usage:"Output to a CSV file, equivalent to the setting for squid 4.0+ in squid.conf 'logformat csv %{%Y|%b|%d|%H|%M|%S|%z}tl|%tr|%st|%>a|%>A|%>p|%>eui|%<a|%<p|%ru|%Ss|%03>Hs|%rm|%[un|%Sh/%<a|%mt'"`
 	Location               *time.Location
+	// MTAddr                 string   `default:"" usage:"The address of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken"`
+	// MTUser                 string   `default:"" usage:"User of the Mikrotik router, from which the data on the comparison of the MAC address and IP address is taken"`
+	// MTPass                 string   `default:"" usage:"The password of the user of the Mikrotik router, from which the data on the comparison of the mac-address and IP-address is taken"`
+	// NumOfTryingConnectToMT int      `default:"10" usage:"The number of attempts to connect to the microtik router"`
+	// DefaultQuotaHourly     uint     `default:"0" usage:"Default hourly traffic consumption quota"`
+	// DefaultQuotaDaily      uint     `default:"0" usage:"Default daily traffic consumption quota"`
+	// DefaultQuotaMonthly    uint     `default:"0" usage:"Default monthly traffic consumption quota"`
+	// SizeOneMegabyte        uint     `default:"1048576" usage:"The number of bytes in one megabyte"`
+	// UseTLS                 bool     `default:"false" usage:"Using TLS to connect to a router"`
+	// UseOnlyAPI             bool     `default:"true" usage:"Use only gomtc API"`
 }
 
 func newConfig() *Config {
