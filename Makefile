@@ -10,8 +10,8 @@ BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
 TAG=$(shell git describe --tags |cut -d- -f1)
 BUILD_TIME?=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
-PLATFORMS=darwin linux windows
-ARCHITECTURES=386 amd64 ppc64
+PLATFORMS=freebsd linux windows
+ARCHITECTURES=386 amd64
 
 LDFLAGS = -ldflags "-w -s -X=main.Version=${VERSION} -X=main.Build=${COMMIT} -X main.gitTag=${TAG} -X main.gitCommit=${COMMIT} -X main.gitBranch=${BRANCH} -X main.buildTime=${BUILD_TIME}"
 
