@@ -4,6 +4,9 @@ github.com/cristalhq/aconfig
 # github.com/cristalhq/aconfig/aconfigyaml v0.16.1
 ## explicit
 github.com/cristalhq/aconfig/aconfigyaml
+# github.com/gorilla/mux v1.8.0
+## explicit
+github.com/gorilla/mux
 # github.com/sirupsen/logrus v1.8.1
 ## explicit
 github.com/sirupsen/logrus
