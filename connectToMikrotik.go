@@ -96,12 +96,16 @@ func (data *Transport) GetInfo(request *request) ResponseType {
 		if response.Mac == "" {
 			response.Mac = ipStruct.ActiveMacAddress
 		}
+		response.HostName = ipStruct.HostName
 	} else {
 		data.timerUpdatedevice.Stop()
 		data.setTimerUpdateDevice(data.Interval)
 	}
 	if response.Mac == "" {
 		response.Mac = request.IP
+	}
+	if response.HostName == "" {
+		response.HostName = "-"
 	}
 
 	return response
